@@ -1,0 +1,1448 @@
+import React, { useEffect, useMemo, useState } from "react";
+
+/* ---------------- DEMO CATALOG (bigger + Pop Smoke added) ---------------- */
+
+const DEMO_TRACKS = [
+  // Pop / synth-pop
+  {
+    id: "demo-1",
+    title: "Blinding Lights",
+    artist: "The Weeknd",
+    year: 2019,
+    popularity: 95,
+    features: { tempo: 171, energy: 0.74, danceability: 0.51, valence: 0.33 },
+    themes: ["nostalgia", "heartbreak", "late-night"],
+    genres: ["synth-pop", "pop"],
+  },
+  {
+    id: "demo-6",
+    title: "As It Was",
+    artist: "Harry Styles",
+    year: 2022,
+    popularity: 94,
+    features: { tempo: 174, energy: 0.73, danceability: 0.52, valence: 0.66 },
+    themes: ["change", "nostalgia", "loss"],
+    genres: ["pop", "synth-pop"],
+  },
+  {
+    id: "demo-10",
+    title: "Don’t Start Now",
+    artist: "Dua Lipa",
+    year: 2019,
+    popularity: 92,
+    features: { tempo: 124, energy: 0.79, danceability: 0.79, valence: 0.68 },
+    themes: ["confidence", "breakup", "independence"],
+    genres: ["pop", "disco-pop"],
+  },
+  {
+    id: "demo-12",
+    title: "Levitating",
+    artist: "Dua Lipa",
+    year: 2020,
+    popularity: 90,
+    features: { tempo: 103, energy: 0.75, danceability: 0.7, valence: 0.8 },
+    themes: ["romance", "euphoria", "dance"],
+    genres: ["pop", "dance-pop"],
+  },
+  {
+    id: "demo-7",
+    title: "Bad Habits",
+    artist: "Ed Sheeran",
+    year: 2021,
+    popularity: 89,
+    features: { tempo: 126, energy: 0.81, danceability: 0.8, valence: 0.69 },
+    themes: ["temptation", "night", "regret"],
+    genres: ["pop", "dance-pop"],
+  },
+
+  // 80s / synth classics
+  {
+    id: "demo-2",
+    title: "Take On Me",
+    artist: "a-ha",
+    year: 1985,
+    popularity: 92,
+    features: { tempo: 169, energy: 0.86, danceability: 0.57, valence: 0.88 },
+    themes: ["love", "yearning", "escape"],
+    genres: ["synth-pop", "new wave"],
+  },
+  {
+    id: "demo-9",
+    title: "Running Up That Hill",
+    artist: "Kate Bush",
+    year: 1985,
+    popularity: 90,
+    features: { tempo: 108, energy: 0.71, danceability: 0.63, valence: 0.35 },
+    themes: ["deal", "empathy", "power"],
+    genres: ["art pop", "synth-pop"],
+  },
+
+  // Indie / dream / synth
+  {
+    id: "demo-3",
+    title: "Midnight City",
+    artist: "M83",
+    year: 2011,
+    popularity: 86,
+    features: { tempo: 105, energy: 0.86, danceability: 0.55, valence: 0.62 },
+    themes: ["night", "wonder", "memory"],
+    genres: ["synth-pop", "indie"],
+  },
+  {
+    id: "demo-8",
+    title: "Space Song",
+    artist: "Beach House",
+    year: 2015,
+    popularity: 83,
+    features: { tempo: 94, energy: 0.34, danceability: 0.51, valence: 0.26 },
+    themes: ["longing", "dream", "distance"],
+    genres: ["dream pop", "indie"],
+  },
+  {
+    id: "demo-14",
+    title: "The Less I Know The Better",
+    artist: "Tame Impala",
+    year: 2015,
+    popularity: 88,
+    features: { tempo: 117, energy: 0.7, danceability: 0.78, valence: 0.65 },
+    themes: ["jealousy", "heartbreak", "self-doubt"],
+    genres: ["psych pop", "indie"],
+  },
+
+  // Pop dance staples
+  {
+    id: "demo-4",
+    title: "I Wanna Dance with Somebody",
+    artist: "Whitney Houston",
+    year: 1987,
+    popularity: 93,
+    features: { tempo: 120, energy: 0.9, danceability: 0.71, valence: 0.92 },
+    themes: ["dance", "love", "joy"],
+    genres: ["pop", "dance-pop"],
+  },
+
+  // Pop breakup
+  {
+    id: "demo-5",
+    title: "Somebody That I Used to Know",
+    artist: "Gotye",
+    year: 2011,
+    popularity: 88,
+    features: { tempo: 129, energy: 0.52, danceability: 0.86, valence: 0.75 },
+    themes: ["breakup", "distance", "regret"],
+    genres: ["indie pop", "pop"],
+  },
+
+  // ------------- Pop Smoke & adjacent (demo values) -------------
+  {
+    id: "ps-1",
+    title: "Dior",
+    artist: "Pop Smoke",
+    year: 2019,
+    popularity: 88,
+    features: { tempo: 142, energy: 0.86, danceability: 0.79, valence: 0.54 },
+    themes: ["flex", "street", "confidence"],
+    genres: ["drill", "hip-hop"],
+  },
+  {
+    id: "ps-2",
+    title: "Welcome to the Party",
+    artist: "Pop Smoke",
+    year: 2019,
+    popularity: 85,
+    features: { tempo: 140, energy: 0.88, danceability: 0.76, valence: 0.5 },
+    themes: ["party", "street", "confidence"],
+    genres: ["drill", "hip-hop"],
+  },
+  {
+    id: "ps-3",
+    title: "What You Know Bout Love",
+    artist: "Pop Smoke",
+    year: 2020,
+    popularity: 90,
+    features: { tempo: 126, energy: 0.6, danceability: 0.83, valence: 0.56 },
+    themes: ["romance", "longing", "vulnerability"],
+    genres: ["hip-hop", "melodic rap"],
+  },
+  {
+    id: "ps-4",
+    title: "For The Night",
+    artist: "Pop Smoke",
+    year: 2020,
+    popularity: 92,
+    features: { tempo: 125, energy: 0.72, danceability: 0.81, valence: 0.55 },
+    themes: ["night", "party", "romance"],
+    genres: ["hip-hop", "melodic rap"],
+  },
+  {
+    id: "ps-5",
+    title: "Mood Swings",
+    artist: "Pop Smoke",
+    year: 2020,
+    popularity: 86,
+    features: { tempo: 120, energy: 0.62, danceability: 0.8, valence: 0.49 },
+    themes: ["romance", "conflict", "jealousy"],
+    genres: ["hip-hop", "melodic rap"],
+  },
+
+  // Adjacent hip-hop / drill-ish energy (demo)
+  {
+    id: "hh-1",
+    title: "HUMBLE.",
+    artist: "Kendrick Lamar",
+    year: 2017,
+    popularity: 90,
+    features: { tempo: 150, energy: 0.82, danceability: 0.78, valence: 0.48 },
+    themes: ["confidence", "power", "bravado"],
+    genres: ["hip-hop", "rap"],
+  },
+  {
+    id: "hh-2",
+    title: "SICKO MODE",
+    artist: "Travis Scott",
+    year: 2018,
+    popularity: 92,
+    features: { tempo: 155, energy: 0.84, danceability: 0.74, valence: 0.52 },
+    themes: ["flex", "hype", "night"],
+    genres: ["hip-hop", "rap"],
+  },
+  {
+    id: "hh-3",
+    title: "God's Plan",
+    artist: "Drake",
+    year: 2018,
+    popularity: 93,
+    features: { tempo: 77, energy: 0.63, danceability: 0.75, valence: 0.54 },
+    themes: ["gratitude", "fate", "success"],
+    genres: ["hip-hop", "rap"],
+  },
+  {
+    id: "hh-4",
+    title: "Goosebumps",
+    artist: "Travis Scott",
+    year: 2016,
+    popularity: 89,
+    features: { tempo: 130, energy: 0.66, danceability: 0.8, valence: 0.49 },
+    themes: ["romance", "night", "temptation"],
+    genres: ["hip-hop", "rap"],
+  },
+];
+
+/* ---------------- HELPERS ---------------- */
+
+const clamp01 = (x) => Math.max(0, Math.min(1, x));
+
+const jaccard = (a, b) => {
+  const A = new Set(a);
+  const B = new Set(b);
+  let inter = 0;
+  for (const x of A) if (B.has(x)) inter++;
+  const union = A.size + B.size - inter;
+  return union === 0 ? 0 : inter / union;
+};
+
+const distanceScore = (a, b, tolerance) => {
+  const d = Math.abs(a - b);
+  return clamp01(1 - d / tolerance);
+};
+
+const computeBeatScore = (seed, cand) => {
+  const tempo = distanceScore(seed.features.tempo, cand.features.tempo, 40);
+  const energy = 1 - Math.abs(seed.features.energy - cand.features.energy);
+  const dance =
+    1 - Math.abs(seed.features.danceability - cand.features.danceability);
+  return clamp01(0.55 * tempo + 0.25 * energy + 0.2 * dance);
+};
+
+const computeMoodScore = (seed, cand) => {
+  const valence = 1 - Math.abs(seed.features.valence - cand.features.valence);
+  const energy = 1 - Math.abs(seed.features.energy - cand.features.energy);
+  return clamp01(0.6 * valence + 0.4 * energy);
+};
+
+const computeLyricScore = (seed, cand) => jaccard(seed.themes, cand.themes);
+const computeGenreScore = (seed, cand) => jaccard(seed.genres, cand.genres);
+
+function prettyLabel(key) {
+  if (key === "beat") return "🎵 Similar beat";
+  if (key === "lyrics") return "🧠 Similar meaning";
+  if (key === "artist") return "🎤 Artist neighborhood";
+  if (key === "genre") return "🏷️ Genre overlap";
+  if (key === "mood") return "🎭 Mood match";
+  if (key === "pop") return "🌑 Popularity / obscurity";
+  return key;
+}
+
+const reasonBadges = (scores) => {
+  const entries = Object.entries(scores)
+    .filter(([k]) => k !== "final")
+    .sort((a, b) => b[1] - a[1]);
+  return entries.slice(0, 2).map(([k, v]) => ({
+    key: k,
+    text: `${prettyLabel(k)} • ${(v * 100).toFixed(0)}%`,
+  }));
+};
+
+function sharedItems(a, b) {
+  const A = new Set(a);
+  const B = new Set(b);
+  return [...A].filter((x) => B.has(x));
+}
+
+/* ---------------- UI COMPONENTS ---------------- */
+
+function Pill({ active, children, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        borderRadius: 999,
+        border: "1px solid rgba(0,0,0,0.12)",
+        padding: "8px 12px",
+        background: active ? "rgba(17,24,39,0.92)" : "rgba(255,255,255,0.85)",
+        color: active ? "white" : "#111827",
+        fontWeight: 900,
+        cursor: "pointer",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Chip({ children }) {
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        border: "1px solid rgba(0,0,0,0.10)",
+        padding: "4px 8px",
+        borderRadius: 999,
+        fontSize: 12,
+        background: "rgba(255,255,255,0.7)",
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
+function SliderRow({ icon, label, value, onChange, hint }) {
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "28px 1fr 46px",
+        gap: 10,
+        alignItems: "center",
+      }}
+    >
+      <div style={{ fontSize: 18 }}>{icon}</div>
+      <div>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "baseline",
+          }}
+        >
+          <div style={{ fontSize: 13, fontWeight: 800 }}>{label}</div>
+          {hint ? (
+            <div style={{ fontSize: 12, color: "#6b7280" }}>{hint}</div>
+          ) : null}
+        </div>
+        <input
+          type="range"
+          min="0"
+          max="100"
+          value={value}
+          onChange={(e) => onChange(+e.target.value)}
+          style={{ width: "100%" }}
+        />
+      </div>
+      <div
+        style={{
+          fontSize: 12,
+          color: "#111827",
+          fontWeight: 800,
+          textAlign: "right",
+        }}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function Metric({ label, value }) {
+  return (
+    <div
+      style={{
+        border: "1px solid rgba(0,0,0,0.10)",
+        borderRadius: 14,
+        padding: 12,
+        background: "rgba(255,255,255,0.75)",
+      }}
+    >
+      <div style={{ fontSize: 12, color: "#6b7280" }}>{label}</div>
+      <div style={{ fontSize: 16, fontWeight: 900 }}>{value}</div>
+    </div>
+  );
+}
+
+function Popover({ open, title, onClose, children }) {
+  if (!open) return null;
+  return (
+    <div
+      onMouseDown={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.22)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 18,
+        zIndex: 9999,
+      }}
+    >
+      <div
+        onMouseDown={(e) => e.stopPropagation()}
+        style={{
+          width: "min(720px, 100%)",
+          background: "rgba(255,255,255,0.92)",
+          border: "1px solid rgba(0,0,0,0.12)",
+          borderRadius: 18,
+          boxShadow: "0 18px 50px rgba(17,24,39,0.22)",
+          padding: 16,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 12,
+            alignItems: "center",
+          }}
+        >
+          <div style={{ fontSize: 15, fontWeight: 900 }}>{title}</div>
+          <button
+            onClick={onClose}
+            style={{
+              borderRadius: 12,
+              border: "1px solid rgba(0,0,0,0.12)",
+              padding: "8px 10px",
+              background: "white",
+              cursor: "pointer",
+              fontWeight: 800,
+            }}
+          >
+            ✕
+          </button>
+        </div>
+        <div style={{ marginTop: 12 }}>{children}</div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- APP ---------------- */
+
+export default function App() {
+  const [song, setSong] = useState("Dior");
+  const [artist, setArtist] = useState("Pop Smoke");
+  const [mode, setMode] = useState("Hybrid");
+
+  // weights (0..100)
+  const [wBeat, setWBeat] = useState(55);
+  const [wLyrics, setWLyrics] = useState(25);
+  const [wArtist, setWArtist] = useState(10);
+  const [wGenre, setWGenre] = useState(10);
+
+  const [obscurity, setObscurity] = useState(20); // 0 popular, 100 obscure
+
+  const [seed, setSeed] = useState(DEMO_TRACKS[0]);
+  const [results, setResults] = useState([]);
+  const [active, setActive] = useState(null);
+
+  // AI vibe UI state
+  const [vibeText, setVibeText] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState("");
+
+  // Popover state
+  const [whyOpen, setWhyOpen] = useState(false);
+  const [whyPayload, setWhyPayload] = useState(null);
+
+  function clamp(n, min, max) {
+    return Math.max(min, Math.min(max, n));
+  }
+
+  function normalizeWeights(w) {
+    let beat = clamp(Number(w.wBeat ?? 0), 0, 100);
+    let lyrics = clamp(Number(w.wLyrics ?? 0), 0, 100);
+    let artistW = clamp(Number(w.wArtist ?? 0), 0, 100);
+    let genreW = clamp(Number(w.wGenre ?? 0), 0, 100);
+
+    const sum = beat + lyrics + artistW + genreW;
+    if (sum === 0) return { wBeat: 25, wLyrics: 25, wArtist: 25, wGenre: 25 };
+
+    const raw = {
+      wBeat: (beat / sum) * 100,
+      wLyrics: (lyrics / sum) * 100,
+      wArtist: (artistW / sum) * 100,
+      wGenre: (genreW / sum) * 100,
+    };
+
+    const rounded = {
+      wBeat: Math.round(raw.wBeat),
+      wLyrics: Math.round(raw.wLyrics),
+      wArtist: Math.round(raw.wArtist),
+      wGenre: Math.round(raw.wGenre),
+    };
+
+    const roundedSum =
+      rounded.wBeat + rounded.wLyrics + rounded.wArtist + rounded.wGenre;
+    if (roundedSum !== 100) {
+      const keys = ["wBeat", "wLyrics", "wArtist", "wGenre"];
+      let bestKey = keys[0];
+      for (const k of keys) if (raw[k] > raw[bestKey]) bestKey = k;
+      rounded[bestKey] = clamp(rounded[bestKey] + (100 - roundedSum), 0, 100);
+    }
+
+    return rounded;
+  }
+
+  const MOCK_MODE = true; // <-- set to false after you deploy to Vercel
+
+  async function generateSettingsFromVibe(vibeTextInput) {
+    if (MOCK_MODE) {
+      // Simple “AI-like” presets based on keywords
+      const t = (vibeTextInput || "").toLowerCase();
+
+      if (
+        t.includes("study") ||
+        t.includes("calm") ||
+        t.includes("focus") ||
+        t.includes("rain")
+      ) {
+        return {
+          wBeat: 30,
+          wLyrics: 45,
+          wArtist: 10,
+          wGenre: 15,
+          obscurity: 55,
+        };
+      }
+      if (t.includes("party") || t.includes("hype") || t.includes("gym")) {
+        return {
+          wBeat: 60,
+          wLyrics: 15,
+          wArtist: 10,
+          wGenre: 15,
+          obscurity: 20,
+        };
+      }
+      if (t.includes("sad") || t.includes("heartbreak")) {
+        return {
+          wBeat: 25,
+          wLyrics: 55,
+          wArtist: 10,
+          wGenre: 10,
+          obscurity: 40,
+        };
+      }
+      // default
+      return { wBeat: 45, wLyrics: 25, wArtist: 15, wGenre: 15, obscurity: 30 };
+    }
+
+    // Real API mode (works after deploying to Vercel)
+    const r = await fetch("/api/vibe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ vibeText: vibeTextInput }),
+    });
+
+    // Safer parsing (better error message if HTML comes back)
+    const text = await r.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error(
+        "Server returned HTML instead of JSON (endpoint not running here)."
+      );
+    }
+
+    if (!r.ok) throw new Error(data.error || "Request failed");
+    return data.settings;
+  }
+
+  async function onGenerateFromVibe() {
+    setAiError("");
+    setAiLoading(true);
+    try {
+      const settings = await generateSettingsFromVibe(vibeText);
+
+      const weights = normalizeWeights(settings);
+      setWBeat(weights.wBeat);
+      setWLyrics(weights.wLyrics);
+      setWArtist(weights.wArtist);
+      setWGenre(weights.wGenre);
+
+      setObscurity(clamp(Number(settings.obscurity ?? 20), 0, 100));
+    } catch (e) {
+      setAiError(e?.message || "Something went wrong.");
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
+  const weightSum = wBeat + wLyrics + wArtist + wGenre;
+
+  const normWeights = useMemo(() => {
+    const sum = weightSum || 1;
+    return {
+      beat: wBeat / sum,
+      lyrics: wLyrics / sum,
+      artist: wArtist / sum,
+      genre: wGenre / sum,
+    };
+  }, [wBeat, wLyrics, wArtist, wGenre, weightSum]);
+
+  useEffect(() => {
+    const initialSeed = pickSeedFromDemo(song, artist);
+    setSeed(initialSeed);
+    setActive(initialSeed);
+    setResults(rank(initialSeed, mode, normWeights, obscurity));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function pickSeedFromDemo(songText, artistText) {
+    const q = `${songText}`.trim().toLowerCase();
+    const a = `${artistText}`.trim().toLowerCase();
+    const best = DEMO_TRACKS.find(
+      (t) =>
+        t.title.toLowerCase().includes(q) && t.artist.toLowerCase().includes(a)
+    );
+    const fallback =
+      DEMO_TRACKS.find((t) => t.title.toLowerCase().includes(q)) ||
+      DEMO_TRACKS[0];
+    return best || fallback;
+  }
+
+  function rank(seedTrack, currentMode, weights, obscurityValue) {
+    const popBias = (obscurityValue / 100) * -2 + 1; // 0 -> +1 (popular), 100 -> -1 (obscure)
+
+    const popScore = (cand) => {
+      const p = cand.popularity / 100;
+      const popular = clamp01(0.5 + 0.5 * popBias) * p;
+      const obscure = clamp01(0.5 - 0.5 * popBias) * (1 - p);
+      return clamp01(popular + obscure);
+    };
+
+    return DEMO_TRACKS.filter((t) => t.id !== seedTrack.id)
+      .map((t) => {
+        const beat = computeBeatScore(seedTrack, t);
+        const lyrics = computeLyricScore(seedTrack, t);
+        const genre = computeGenreScore(seedTrack, t);
+        const mood = computeMoodScore(seedTrack, t);
+        const artistScore =
+          t.artist === seedTrack.artist ? 1 : clamp01(0.15 + 0.65 * genre);
+        const pop = popScore(t);
+
+        let modeWeights = { ...weights };
+        let modeBoost = 0;
+
+        if (currentMode === "Beat Matches") {
+          modeWeights = { beat: 0.75, lyrics: 0.1, artist: 0.05, genre: 0.1 };
+        } else if (currentMode === "Lyric Matches") {
+          modeWeights = { beat: 0.15, lyrics: 0.7, artist: 0.05, genre: 0.1 };
+        } else if (currentMode === "Mood Matches") {
+          modeBoost = 0.2 * mood;
+          modeWeights = { beat: 0.35, lyrics: 0.2, artist: 0.1, genre: 0.35 };
+        } else if (currentMode === "Deep Cuts") {
+          modeBoost = 0.18 * (1 - t.popularity / 100);
+          modeWeights = { beat: 0.35, lyrics: 0.25, artist: 0.05, genre: 0.35 };
+        }
+
+        const final = clamp01(
+          modeWeights.beat * beat +
+            modeWeights.lyrics * lyrics +
+            modeWeights.artist * artistScore +
+            modeWeights.genre * genre +
+            0.1 * pop +
+            modeBoost
+        );
+
+        const scores = {
+          beat,
+          lyrics,
+          artist: artistScore,
+          genre,
+          mood,
+          pop,
+          final,
+        };
+
+        const tempoDelta = Math.round(
+          t.features.tempo - seedTrack.features.tempo
+        );
+        const energyDelta =
+          (t.features.energy - seedTrack.features.energy) * 100;
+        const danceDelta =
+          (t.features.danceability - seedTrack.features.danceability) * 100;
+        const valenceDelta =
+          (t.features.valence - seedTrack.features.valence) * 100;
+
+        return {
+          track: t,
+          scores,
+          reasons: reasonBadges(scores),
+          debug: {
+            tempoDelta,
+            energyDelta,
+            danceDelta,
+            valenceDelta,
+            sharedThemes: sharedItems(seedTrack.themes, t.themes),
+            sharedGenres: sharedItems(seedTrack.genres, t.genres),
+          },
+        };
+      })
+      .sort((a, b) => b.scores.final - a.scores.final)
+      .slice(0, 10);
+  }
+
+  function rerank(
+    nextSeed = seed,
+    nextMode = mode,
+    nextWeights = normWeights,
+    nextObsc = obscurity
+  ) {
+    setResults(rank(nextSeed, nextMode, nextWeights, nextObsc));
+  }
+
+  function handleFind() {
+    const s = pickSeedFromDemo(song, artist);
+    setSeed(s);
+    setActive(s);
+    rerank(s, mode, normWeights, obscurity);
+  }
+
+  function openWhy(item) {
+    setWhyPayload(item);
+    setWhyOpen(true);
+  }
+
+  const modes = [
+    "Hybrid",
+    "Beat Matches",
+    "Lyric Matches",
+    "Mood Matches",
+    "Deep Cuts",
+  ];
+
+  const appBg = {
+    minHeight: "100vh",
+    padding: 18,
+    background:
+      "radial-gradient(1200px 600px at 20% 10%, rgba(59,130,246,0.18), transparent 60%)," +
+      "radial-gradient(900px 500px at 90% 20%, rgba(16,185,129,0.18), transparent 55%)," +
+      "radial-gradient(900px 500px at 40% 90%, rgba(244,63,94,0.14), transparent 55%)," +
+      "linear-gradient(180deg, #fafafa, #f3f4f6)",
+  };
+
+  const card = {
+    border: "1px solid rgba(0,0,0,0.10)",
+    borderRadius: 18,
+    background: "rgba(255,255,255,0.72)",
+    boxShadow: "0 8px 24px rgba(17,24,39,0.06)",
+  };
+
+  return (
+    <div style={appBg}>
+      <div
+        style={{
+          maxWidth: 1100,
+          margin: "0 auto",
+          fontFamily: "ui-sans-serif, system-ui, -apple-system",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            marginBottom: 14,
+          }}
+        >
+          <div
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: 16,
+              background: "rgba(0,0,0,0.06)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 20,
+            }}
+          >
+            ✨
+          </div>
+          <div>
+            <div style={{ fontSize: 22, fontWeight: 950, letterSpacing: -0.2 }}>
+              Hybrid Song Recommender — Demo
+            </div>
+            <div style={{ fontSize: 13, color: "#6b7280" }}>
+              Tunable + explainable + multi-mode discovery (with Pop Smoke
+              added).
+            </div>
+          </div>
+        </div>
+
+        {/* Input card */}
+        <div style={{ ...card, padding: 16, marginBottom: 14 }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr 150px",
+              gap: 10,
+            }}
+          >
+            <div>
+              <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 6 }}>
+                Song title
+              </div>
+              <input
+                value={song}
+                onChange={(e) => setSong(e.target.value)}
+                placeholder="e.g., Dior"
+                style={inputStyle()}
+              />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 6 }}>
+                Artist
+              </div>
+              <input
+                value={artist}
+                onChange={(e) => setArtist(e.target.value)}
+                placeholder="e.g., Pop Smoke"
+                style={inputStyle()}
+              />
+            </div>
+            <div style={{ display: "flex", alignItems: "end" }}>
+              <button onClick={handleFind} style={primaryButtonStyle()}>
+                🔎 Find similar
+              </button>
+            </div>
+          </div>
+
+          <div
+            style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 8 }}
+          >
+            {modes.map((m) => (
+              <Pill
+                key={m}
+                active={mode === m}
+                onClick={() => {
+                  setMode(m);
+                  rerank(seed, m, normWeights, obscurity);
+                }}
+              >
+                {m}
+              </Pill>
+            ))}
+          </div>
+
+          <div
+            style={{
+              marginTop: 14,
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 14,
+            }}
+          >
+            <div
+              style={{
+                ...card,
+                padding: 14,
+                background: "rgba(255,255,255,0.55)",
+              }}
+            >
+              <div style={{ fontSize: 13, fontWeight: 950, marginBottom: 10 }}>
+                Similarity controls
+              </div>
+              <div style={{ display: "grid", gap: 12 }}>
+                <SliderRow
+                  icon="🎵"
+                  label="Beat similarity"
+                  value={wBeat}
+                  onChange={setWBeat}
+                />
+                <SliderRow
+                  icon="🧠"
+                  label="Lyric/meaning similarity"
+                  value={wLyrics}
+                  onChange={setWLyrics}
+                />
+                <SliderRow
+                  icon="🎤"
+                  label="Artist neighborhood"
+                  value={wArtist}
+                  onChange={setWArtist}
+                />
+                <SliderRow
+                  icon="🏷️"
+                  label="Genre overlap"
+                  value={wGenre}
+                  onChange={setWGenre}
+                />
+              </div>
+              <div style={{ marginTop: 10, fontSize: 12, color: "#6b7280" }}>
+                Tip: weights auto-normalize (you can set them however you want).
+              </div>
+            </div>
+
+            <div
+              style={{
+                ...card,
+                padding: 14,
+                background: "rgba(255,255,255,0.55)",
+              }}
+            >
+              <div style={{ fontSize: 13, fontWeight: 950, marginBottom: 10 }}>
+                Discovery bias
+              </div>
+              <SliderRow
+                icon="🌑"
+                label="Obscurity"
+                value={obscurity}
+                onChange={setObscurity}
+                hint="0 popular • 100 obscure"
+              />
+              <div style={{ marginTop: 10, fontSize: 12, color: "#111827" }}>
+                <b>Explainability:</b> click <b>Why these?</b> on any track to
+                see the breakdown.
+              </div>
+            </div>
+          </div>
+
+          <div
+            style={{
+              marginTop: 12,
+              display: "flex",
+              gap: 10,
+              flexWrap: "wrap",
+              alignItems: "center",
+            }}
+          >
+            <button
+              onClick={() => rerank(seed, mode, normWeights, obscurity)}
+              style={secondaryButtonStyle()}
+            >
+              🪄 Re-rank with current settings
+            </button>
+            <div style={{ fontSize: 12, color: "#6b7280" }}>
+              Seed: <b>{seed.title}</b> — {seed.artist}
+            </div>
+          </div>
+
+          {/* AI Vibe → Settings */}
+          <div
+            style={{
+              marginTop: 12,
+              padding: 12,
+              border: "1px solid rgba(0,0,0,0.12)",
+              borderRadius: 14,
+              background: "rgba(255,255,255,0.70)",
+            }}
+          >
+            <div style={{ fontWeight: 950, marginBottom: 6 }}>
+              AI: Describe the vibe
+            </div>
+
+            <input
+              value={vibeText}
+              onChange={(e) => setVibeText(e.target.value)}
+              placeholder='e.g., "rainy night studying, calm but focused"'
+              style={inputStyle()}
+            />
+
+            <div
+              style={{
+                marginTop: 10,
+                display: "flex",
+                gap: 10,
+                alignItems: "center",
+              }}
+            >
+              <button
+                onClick={onGenerateFromVibe}
+                disabled={aiLoading || vibeText.trim().length < 3}
+                style={secondaryButtonStyle()}
+              >
+                {aiLoading ? "Generating..." : "Generate settings"}
+              </button>
+
+              {aiError ? (
+                <div style={{ color: "crimson", fontSize: 12 }}>{aiError}</div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+
+        {/* Two-column: recs + deep dive */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1.35fr 0.9fr",
+            gap: 14,
+          }}
+        >
+          <div style={{ ...card, padding: 16 }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "baseline",
+                marginBottom: 10,
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 12, color: "#6b7280" }}>
+                  Recommendations
+                </div>
+                <div style={{ fontSize: 16, fontWeight: 950 }}>Top matches</div>
+              </div>
+              <div style={{ fontSize: 12, color: "#6b7280" }}>Mode: {mode}</div>
+            </div>
+
+            <div style={{ display: "grid", gap: 10 }}>
+              {results.map((r) => (
+                <div
+                  key={r.track.id}
+                  style={{
+                    borderRadius: 16,
+                    border: "1px solid rgba(0,0,0,0.10)",
+                    padding: 12,
+                    background:
+                      active?.id === r.track.id
+                        ? "rgba(0,0,0,0.06)"
+                        : "rgba(255,255,255,0.70)",
+                  }}
+                >
+                  <button
+                    onClick={() => setActive(r.track)}
+                    style={{
+                      width: "100%",
+                      textAlign: "left",
+                      background: "transparent",
+                      border: "none",
+                      padding: 0,
+                      cursor: "pointer",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: 10,
+                      }}
+                    >
+                      <div style={{ minWidth: 0 }}>
+                        <div
+                          style={{
+                            fontSize: 14,
+                            fontWeight: 950,
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                          }}
+                        >
+                          {r.track.title}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 13,
+                            color: "#6b7280",
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                          }}
+                        >
+                          {r.track.artist}
+                        </div>
+                        <div
+                          style={{
+                            marginTop: 8,
+                            display: "flex",
+                            gap: 6,
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          {r.reasons.map((b) => (
+                            <Chip key={b.key}>{b.text}</Chip>
+                          ))}
+                        </div>
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ fontSize: 12, color: "#6b7280" }}>
+                          score
+                        </div>
+                        <div style={{ fontSize: 18, fontWeight: 950 }}>
+                          {Math.round(r.scores.final * 100)}
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+
+                  <div
+                    style={{
+                      marginTop: 10,
+                      display: "flex",
+                      gap: 8,
+                      justifyContent: "flex-end",
+                    }}
+                  >
+                    <button
+                      onClick={() => openWhy(r)}
+                      style={tinyButtonStyle()}
+                    >
+                      ❓ Why these?
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ ...card, padding: 16 }}>
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 12, color: "#6b7280" }}>Deep dive</div>
+              <div style={{ fontSize: 16, fontWeight: 950 }}>
+                {active
+                  ? `${active.title} — ${active.artist}`
+                  : "Select a recommendation"}
+              </div>
+            </div>
+
+            {active && (
+              <>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: 10,
+                  }}
+                >
+                  <Metric
+                    label="Tempo"
+                    value={`${Math.round(active.features.tempo)} BPM`}
+                  />
+                  <Metric
+                    label="Energy"
+                    value={`${Math.round(active.features.energy * 100)}%`}
+                  />
+                  <Metric
+                    label="Danceability"
+                    value={`${Math.round(active.features.danceability * 100)}%`}
+                  />
+                  <Metric
+                    label="Valence"
+                    value={`${Math.round(active.features.valence * 100)}%`}
+                  />
+                </div>
+
+                <div style={{ marginTop: 12 }}>
+                  <div
+                    style={{ fontSize: 13, fontWeight: 950, marginBottom: 8 }}
+                  >
+                    Themes (demo)
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {active.themes.map((t) => (
+                      <Chip key={t}>{t}</Chip>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 12 }}>
+                  <div
+                    style={{ fontSize: 13, fontWeight: 950, marginBottom: 8 }}
+                  >
+                    Genres (demo)
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {active.genres.map((g) => (
+                      <Chip key={g}>{g}</Chip>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+
+            <div style={{ marginTop: 14, fontSize: 12, color: "#6b7280" }}>
+              Try: seed <b>Dior — Pop Smoke</b>, then switch to{" "}
+              <b>Beat Matches</b> and crank 🎵, or switch to{" "}
+              <b>Lyric Matches</b> and crank 🧠.
+            </div>
+          </div>
+        </div>
+
+        {/* WHY THESE popover */}
+        <Popover
+          open={whyOpen}
+          title={
+            whyPayload
+              ? `Why "${whyPayload.track.title} — ${whyPayload.track.artist}"?`
+              : "Why this recommendation?"
+          }
+          onClose={() => setWhyOpen(false)}
+        >
+          {whyPayload && (
+            <div style={{ display: "grid", gap: 12 }}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: 10,
+                }}
+              >
+                <div style={{ ...panelStyle() }}>
+                  <div style={panelTitleStyle()}>Seed</div>
+                  <div style={{ fontWeight: 900 }}>{seed.title}</div>
+                  <div style={{ color: "#6b7280", fontSize: 13 }}>
+                    {seed.artist}
+                  </div>
+                </div>
+                <div style={{ ...panelStyle() }}>
+                  <div style={panelTitleStyle()}>Recommendation</div>
+                  <div style={{ fontWeight: 900 }}>
+                    {whyPayload.track.title}
+                  </div>
+                  <div style={{ color: "#6b7280", fontSize: 13 }}>
+                    {whyPayload.track.artist}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ ...panelStyle() }}>
+                <div style={panelTitleStyle()}>Final score</div>
+                <div style={{ fontSize: 22, fontWeight: 950 }}>
+                  {Math.round(whyPayload.scores.final * 100)} / 100
+                </div>
+                <div style={{ fontSize: 12, color: "#6b7280" }}>
+                  Mode: <b>{mode}</b> • Weights: 🎵 {wBeat} / 🧠 {wLyrics} / 🎤{" "}
+                  {wArtist} / 🏷️ {wGenre} • 🌑 {obscurity}
+                </div>
+              </div>
+
+              <div style={{ ...panelStyle() }}>
+                <div style={panelTitleStyle()}>Score breakdown</div>
+                <div style={{ display: "grid", gap: 8 }}>
+                  {[
+                    ["beat", whyPayload.scores.beat],
+                    ["lyrics", whyPayload.scores.lyrics],
+                    ["artist", whyPayload.scores.artist],
+                    ["genre", whyPayload.scores.genre],
+                    ["mood", whyPayload.scores.mood],
+                    ["pop", whyPayload.scores.pop],
+                  ].map(([k, v]) => (
+                    <div
+                      key={k}
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "170px 1fr 50px",
+                        gap: 10,
+                      }}
+                    >
+                      <div style={{ fontWeight: 800, fontSize: 13 }}>
+                        {prettyLabel(k)}
+                      </div>
+                      <div
+                        style={{
+                          height: 10,
+                          borderRadius: 999,
+                          background: "rgba(0,0,0,0.08)",
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: `${Math.round(v * 100)}%`,
+                            height: "100%",
+                            borderRadius: 999,
+                            background: "rgba(17,24,39,0.70)",
+                          }}
+                        />
+                      </div>
+                      <div
+                        style={{
+                          textAlign: "right",
+                          fontWeight: 900,
+                          fontSize: 13,
+                        }}
+                      >
+                        {Math.round(v * 100)}%
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: 10,
+                }}
+              >
+                <div style={{ ...panelStyle() }}>
+                  <div style={panelTitleStyle()}>Concrete comparisons</div>
+                  <div style={{ fontSize: 13, lineHeight: 1.6 }}>
+                    <div>
+                      Tempo delta:{" "}
+                      <b>
+                        {whyPayload.debug.tempoDelta >= 0 ? "+" : ""}
+                        {whyPayload.debug.tempoDelta} BPM
+                      </b>
+                    </div>
+                    <div>
+                      Energy delta:{" "}
+                      <b>
+                        {whyPayload.debug.energyDelta >= 0 ? "+" : ""}
+                        {Math.round(whyPayload.debug.energyDelta)}%
+                      </b>
+                    </div>
+                    <div>
+                      Danceability delta:{" "}
+                      <b>
+                        {whyPayload.debug.danceDelta >= 0 ? "+" : ""}
+                        {Math.round(whyPayload.debug.danceDelta)}%
+                      </b>
+                    </div>
+                    <div>
+                      Valence delta:{" "}
+                      <b>
+                        {whyPayload.debug.valenceDelta >= 0 ? "+" : ""}
+                        {Math.round(whyPayload.debug.valenceDelta)}%
+                      </b>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ ...panelStyle() }}>
+                  <div style={panelTitleStyle()}>Shared tags</div>
+                  <div
+                    style={{ fontSize: 12, color: "#6b7280", marginBottom: 6 }}
+                  >
+                    Themes in common
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 6,
+                      flexWrap: "wrap",
+                      marginBottom: 10,
+                    }}
+                  >
+                    {whyPayload.debug.sharedThemes.length ? (
+                      whyPayload.debug.sharedThemes.map((t) => (
+                        <Chip key={t}>{t}</Chip>
+                      ))
+                    ) : (
+                      <span style={{ fontSize: 13, color: "#6b7280" }}>
+                        None (demo themes)
+                      </span>
+                    )}
+                  </div>
+                  <div
+                    style={{ fontSize: 12, color: "#6b7280", marginBottom: 6 }}
+                  >
+                    Genres in common
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {whyPayload.debug.sharedGenres.length ? (
+                      whyPayload.debug.sharedGenres.map((g) => (
+                        <Chip key={g}>{g}</Chip>
+                      ))
+                    ) : (
+                      <span style={{ fontSize: 13, color: "#6b7280" }}>
+                        None (demo genres)
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </Popover>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- STYLES ---------------- */
+
+function inputStyle() {
+  return {
+    width: "100%",
+    borderRadius: 14,
+    border: "1px solid rgba(0,0,0,0.12)",
+    padding: "10px 12px",
+    outline: "none",
+    fontSize: 14,
+    background: "rgba(255,255,255,0.85)",
+  };
+}
+
+function primaryButtonStyle() {
+  return {
+    width: "100%",
+    borderRadius: 14,
+    border: "1px solid rgba(0,0,0,0.12)",
+    padding: "10px 12px",
+    background: "rgba(17,24,39,0.92)",
+    color: "white",
+    fontWeight: 900,
+    cursor: "pointer",
+  };
+}
+
+function secondaryButtonStyle() {
+  return {
+    borderRadius: 999,
+    border: "1px solid rgba(0,0,0,0.12)",
+    padding: "8px 12px",
+    background: "rgba(255,255,255,0.80)",
+    fontWeight: 850,
+    cursor: "pointer",
+  };
+}
+
+function tinyButtonStyle() {
+  return {
+    borderRadius: 999,
+    border: "1px solid rgba(0,0,0,0.12)",
+    padding: "6px 10px",
+    background: "rgba(255,255,255,0.85)",
+    fontWeight: 850,
+    cursor: "pointer",
+    fontSize: 12,
+  };
+}
+
+function panelStyle() {
+  return {
+    border: "1px solid rgba(0,0,0,0.10)",
+    borderRadius: 16,
+    background: "rgba(255,255,255,0.80)",
+    padding: 12,
+  };
+}
+
+function panelTitleStyle() {
+  return { fontSize: 12, color: "#6b7280", marginBottom: 6, fontWeight: 800 };
+}

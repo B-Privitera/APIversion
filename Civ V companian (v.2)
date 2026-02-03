@@ -1,0 +1,2450 @@
+import React, { useMemo, useState } from "react";
+
+/**
+ * Civ V Playstyle Recommender (Full leader list + upgrades)
+ * Upgrades added per your request:
+ *  1) Full World Wonder list (BNW + G&K era set; World Wonders only)
+ *  2) Leader details drawer (click any suggested leader)
+ *  3) First 50 turns generator (based on sliders + map + difficulty + leader)
+ *  4) Map-specific filters (toggle + strictness)
+ *
+ * Design goal: minimize “flexibility” as a scoring factor.
+ * Leaders score for *matching your expressed priorities* and *map/difficulty realities*,
+ * not for being “generically good”.
+ */
+
+// ---------------- Visual / Icons ----------------
+
+const ICON = {
+  food: "🌾",
+  production: "🏭",
+  science: "🔬",
+  military: "⚔️",
+  culture: "🎭",
+  religion: "⛪",
+  wonders: "🏛️",
+  gold: "💰",
+  diplomacy: "🤝",
+  naval: "⚓",
+  defense: "🛡️",
+  mobility: "🐎",
+  happiness: "😊",
+};
+
+const BIAS_ICON = {
+  Coast: "⚓",
+  Desert: "🏜️",
+  Jungle: "🌴",
+  Forest: "🌲",
+  Grassland: "🌱",
+  Tundra: "❄️",
+  Plains: "🌾",
+  Hill: "⛰️",
+  River: "🏞️",
+  Avoid: "🚫",
+  None: "🎲",
+};
+
+// ---------------- Inputs ----------------
+
+const PRIORITIES = [
+  {
+    key: "food",
+    label: "Growth / Food",
+    icon: ICON.food,
+    desc: "Big cities, specialists, faster scaling",
+  },
+  {
+    key: "production",
+    label: "Production",
+    icon: ICON.production,
+    desc: "Units/buildings/wonders faster",
+  },
+  {
+    key: "science",
+    label: "Science",
+    icon: ICON.science,
+    desc: "Tech lead, timing pushes, space",
+  },
+  {
+    key: "military",
+    label: "Military (Offense)",
+    icon: ICON.military,
+    desc: "War tempo, conquest, pressure",
+  },
+  {
+    key: "defense",
+    label: "Defense / Survival",
+    icon: ICON.defense,
+    desc: "Hold land, survive early AI pressure",
+  },
+  {
+    key: "culture",
+    label: "Culture / Tourism",
+    icon: ICON.culture,
+    desc: "Policies, tourism pressure, culture win",
+  },
+  {
+    key: "religion",
+    label: "Religion / Faith",
+    icon: ICON.religion,
+    desc: "Beliefs, faith economy, GP buying",
+  },
+  {
+    key: "wonders",
+    label: "Wonder Focus",
+    icon: ICON.wonders,
+    desc: "Try for key wonders, plan build windows",
+  },
+  {
+    key: "gold",
+    label: "Gold / Trade",
+    icon: ICON.gold,
+    desc: "Buy buildings/units, fund wars or CS",
+  },
+  {
+    key: "diplomacy",
+    label: "Diplomacy / City-States",
+    icon: ICON.diplomacy,
+    desc: "Allies, World Congress, diplo win",
+  },
+  {
+    key: "naval",
+    label: "Naval / Coastal Play",
+    icon: ICON.naval,
+    desc: "Sea control, coastal empire, navy power",
+  },
+];
+
+const DIFFICULTIES = [
+  {
+    id: "settler",
+    name: "Settler",
+    icon: "🧸",
+    aiPressure: 0.4,
+    wonderPunish: 0.0,
+  },
+  {
+    id: "chieftain",
+    name: "Chieftain",
+    icon: "🪵",
+    aiPressure: 0.5,
+    wonderPunish: 0.05,
+  },
+  {
+    id: "warlord",
+    name: "Warlord",
+    icon: "🛡️",
+    aiPressure: 0.6,
+    wonderPunish: 0.08,
+  },
+  {
+    id: "prince",
+    name: "Prince",
+    icon: "👑",
+    aiPressure: 0.7,
+    wonderPunish: 0.12,
+  },
+  {
+    id: "king",
+    name: "King",
+    icon: "🏰",
+    aiPressure: 0.85,
+    wonderPunish: 0.18,
+  },
+  {
+    id: "emperor",
+    name: "Emperor",
+    icon: "🐉",
+    aiPressure: 1.0,
+    wonderPunish: 0.24,
+  },
+  {
+    id: "immortal",
+    name: "Immortal",
+    icon: "☠️",
+    aiPressure: 1.15,
+    wonderPunish: 0.3,
+  },
+  {
+    id: "deity",
+    name: "Deity",
+    icon: "🌋",
+    aiPressure: 1.3,
+    wonderPunish: 0.36,
+  },
+];
+
+const MAPS = [
+  {
+    id: "pangaea",
+    name: "Pangaea",
+    icon: "🗺️",
+    knobs: {
+      navalValue: 0.3,
+      landWarValue: 1.2,
+      diploValue: 0.9,
+      religionValue: 0.95,
+    },
+    notes: "Fast contact, land wars, early pressure and defense matter.",
+  },
+  {
+    id: "continents",
+    name: "Continents",
+    icon: "🌍",
+    knobs: {
+      navalValue: 0.75,
+      landWarValue: 0.85,
+      diploValue: 1.0,
+      religionValue: 0.95,
+    },
+    notes: "Balanced; land early, naval/exploration later.",
+  },
+  {
+    id: "archipelago",
+    name: "Archipelago",
+    icon: "🏝️",
+    knobs: {
+      navalValue: 1.35,
+      landWarValue: 0.35,
+      diploValue: 1.05,
+      religionValue: 0.9,
+    },
+    notes: "Naval civs shine. Coastal starts and sea control are huge.",
+  },
+  {
+    id: "small_continents",
+    name: "Small Continents",
+    icon: "🧭",
+    knobs: {
+      navalValue: 1.2,
+      landWarValue: 0.6,
+      diploValue: 1.05,
+      religionValue: 0.95,
+    },
+    notes:
+      "Hybrid: strong naval transitions; flexible but map rewards coast/navy.",
+  },
+  {
+    id: "highlands",
+    name: "Highlands",
+    icon: "⛰️",
+    knobs: {
+      navalValue: 0.1,
+      landWarValue: 1.05,
+      diploValue: 0.9,
+      religionValue: 0.95,
+    },
+    notes: "Mountains/hills: defense + production + mobility bonuses matter.",
+  },
+  {
+    id: "fractal",
+    name: "Fractal",
+    icon: "🌀",
+    knobs: {
+      navalValue: 0.85,
+      landWarValue: 0.85,
+      diploValue: 1.0,
+      religionValue: 0.95,
+    },
+    notes:
+      "Unpredictable geography; results still driven by strengths + sliders.",
+  },
+];
+
+// ---------------- Victory / Policies ----------------
+
+const VICTORIES = [
+  {
+    id: "Science",
+    icon: "🚀",
+    weights: { science: 1.0, production: 0.55, food: 0.35, defense: 0.25 },
+  },
+  {
+    id: "Domination",
+    icon: "🏆",
+    weights: {
+      military: 1.0,
+      production: 0.5,
+      gold: 0.35,
+      naval: 0.25,
+      defense: 0.2,
+      mobility: 0.15,
+    },
+  },
+  {
+    id: "Culture",
+    icon: "🎨",
+    weights: { culture: 1.0, wonders: 0.55, religion: 0.25, gold: 0.25 },
+  },
+  {
+    id: "Diplomacy",
+    icon: "🗳️",
+    weights: { diplomacy: 1.0, gold: 0.65, culture: 0.15, defense: 0.2 },
+  },
+  {
+    id: "Faith Plan",
+    icon: "✨",
+    weights: {
+      religion: 1.0,
+      culture: 0.25,
+      gold: 0.2,
+      diplomacy: 0.2,
+      defense: 0.15,
+    },
+  },
+];
+
+const POLICY_PATHS = [
+  {
+    id: "science_tall",
+    name: "Tall Science",
+    when: (ctx) => ctx.victory === "Science" && ctx.shape === "tall",
+    steps: [
+      "Tradition opener → finish (tall core)",
+      "Rationalism core (Secularism → Free Thought)",
+      "Ideology: Order (production/science) or Freedom (specialists)",
+    ],
+  },
+  {
+    id: "science_wide",
+    name: "Wide Science",
+    when: (ctx) =>
+      ctx.victory === "Science" &&
+      (ctx.shape === "wide" || ctx.shape === "hybrid"),
+    steps: [
+      "Liberty opener → finish (wide tempo)",
+      "Rationalism core",
+      "Ideology: Order (production scaling)",
+    ],
+  },
+  {
+    id: "domination",
+    name: "Domination Tempo",
+    when: (ctx) => ctx.victory === "Domination",
+    steps: [
+      "Honor opener (or Tradition if you need stability)",
+      "Commerce (gold for upgrades) or Rationalism (tech parity) depending on war timing",
+      "Ideology: Autocracy commonly",
+    ],
+  },
+  {
+    id: "culture",
+    name: "Tourism Engine",
+    when: (ctx) => ctx.victory === "Culture",
+    steps: [
+      "Tradition (usually) or Liberty (if wide culture)",
+      "Aesthetics (if you use it) / culture multipliers focus",
+      "Ideology: Freedom commonly",
+    ],
+  },
+  {
+    id: "diplomacy",
+    name: "City-State Diplomacy",
+    when: (ctx) => ctx.victory === "Diplomacy",
+    steps: [
+      "Tradition/Liberty based on empire shape",
+      "Patronage (Consulates → Scholasticism)",
+      "Commerce (trade) to fund influence",
+    ],
+  },
+  {
+    id: "faith_pivot",
+    name: "Faith Economy → Pivot",
+    when: (ctx) => ctx.victory === "Faith Plan",
+    steps: [
+      "Piety opener if racing religion (otherwise skip)",
+      "Turn faith into value (buildings/GP later) and pivot to your real win",
+      "Common pivots: Culture (tourism), Diplomacy (influence), Science (GP)",
+    ],
+  },
+];
+
+// ---------------- Full leader list (43 civs) ----------------
+// This is the same style you referenced yesterday: id/civ/leader/exp/bias/tags.
+// IMPORTANT: we’re not adding a “flex” stat; these tags are concrete strengths.
+
+const LEADERS = [
+  {
+    id: "america",
+    civ: "America",
+    leader: "Washington",
+    exp: "Vanilla",
+    bias: "None",
+    tags: { defense: 7, military: 6, diplomacy: 5, science: 5 },
+  },
+  {
+    id: "arabia",
+    civ: "Arabia",
+    leader: "Harun al-Rashid",
+    exp: "Vanilla",
+    bias: "Desert",
+    tags: { gold: 8, religion: 7, diplomacy: 6 },
+  },
+  {
+    id: "assyria",
+    civ: "Assyria",
+    leader: "Ashurbanipal",
+    exp: "BNW",
+    bias: "Avoid",
+    tags: { military: 8, science: 6, production: 6 },
+  },
+  {
+    id: "austria",
+    civ: "Austria",
+    leader: "Maria Theresa",
+    exp: "G&K",
+    bias: "Hill",
+    tags: { diplomacy: 9, gold: 7, production: 5 },
+  },
+  {
+    id: "aztec",
+    civ: "Aztecs",
+    leader: "Montezuma",
+    exp: "Vanilla",
+    bias: "Jungle",
+    tags: { military: 7, culture: 7, food: 6 },
+  },
+  {
+    id: "babylon",
+    civ: "Babylon",
+    leader: "Nebuchadnezzar II",
+    exp: "DLC",
+    bias: "Avoid",
+    tags: { science: 10, production: 6, defense: 7 },
+  },
+  {
+    id: "brazil",
+    civ: "Brazil",
+    leader: "Pedro II",
+    exp: "BNW",
+    bias: "Jungle",
+    tags: { culture: 9, gold: 6 },
+  },
+  {
+    id: "byzantium",
+    civ: "Byzantium",
+    leader: "Theodora",
+    exp: "G&K",
+    bias: "Coast",
+    tags: { religion: 9, culture: 6, diplomacy: 5 },
+  },
+  {
+    id: "carthage",
+    civ: "Carthage",
+    leader: "Dido",
+    exp: "G&K",
+    bias: "Coast",
+    tags: { naval: 8, gold: 6, mobility: 7 },
+  },
+  {
+    id: "celts",
+    civ: "Celts",
+    leader: "Boudicca",
+    exp: "G&K",
+    bias: "Forest",
+    tags: { religion: 9, culture: 6 },
+  },
+  {
+    id: "china",
+    civ: "China",
+    leader: "Wu Zetian",
+    exp: "Vanilla",
+    bias: "None",
+    tags: { military: 8, production: 6, science: 5 },
+  },
+  {
+    id: "denmark",
+    civ: "Denmark",
+    leader: "Harald Bluetooth",
+    exp: "DLC",
+    bias: "Coast",
+    tags: { naval: 8, military: 7, mobility: 8 },
+  },
+  {
+    id: "egypt",
+    civ: "Egypt",
+    leader: "Ramesses II",
+    exp: "Vanilla",
+    bias: "Avoid",
+    tags: { wonders: 10, production: 7, culture: 6, religion: 6 },
+  },
+  {
+    id: "england",
+    civ: "England",
+    leader: "Elizabeth",
+    exp: "Vanilla",
+    bias: "Coast",
+    tags: { naval: 10, military: 7, diplomacy: 6, gold: 6 },
+  },
+  {
+    id: "ethiopia",
+    civ: "Ethiopia",
+    leader: "Haile Selassie",
+    exp: "G&K",
+    bias: "None",
+    tags: { defense: 8, religion: 7, culture: 6 },
+  },
+  {
+    id: "france",
+    civ: "France",
+    leader: "Napoleon",
+    exp: "Vanilla/BNW",
+    bias: "None",
+    tags: { culture: 8, wonders: 6, gold: 5 },
+  },
+  {
+    id: "germany",
+    civ: "Germany",
+    leader: "Bismarck",
+    exp: "Vanilla",
+    bias: "None",
+    tags: { military: 8, gold: 6, production: 6 },
+  },
+  {
+    id: "greece",
+    civ: "Greece",
+    leader: "Alexander",
+    exp: "Vanilla",
+    bias: "None",
+    tags: { diplomacy: 10, military: 6, gold: 6 },
+  },
+  {
+    id: "huns",
+    civ: "Huns",
+    leader: "Attila",
+    exp: "G&K",
+    bias: "Avoid",
+    tags: { military: 10, production: 7, mobility: 7 },
+  },
+  {
+    id: "inca",
+    civ: "Inca",
+    leader: "Pachacuti",
+    exp: "DLC",
+    bias: "Hill",
+    tags: { production: 7, food: 7, mobility: 7, gold: 6, defense: 6 },
+  },
+  {
+    id: "india",
+    civ: "India",
+    leader: "Gandhi",
+    exp: "Vanilla",
+    bias: "Grassland",
+    tags: { food: 7, science: 7, religion: 6, defense: 6 },
+  },
+  {
+    id: "indonesia",
+    civ: "Indonesia",
+    leader: "Gajah Mada",
+    exp: "BNW",
+    bias: "Coast",
+    tags: { naval: 7, gold: 7, religion: 6, culture: 5 },
+  },
+  {
+    id: "iroquois",
+    civ: "Iroquois",
+    leader: "Hiawatha",
+    exp: "Vanilla",
+    bias: "Forest",
+    tags: { production: 7, military: 6, mobility: 6 },
+  },
+  {
+    id: "japan",
+    civ: "Japan",
+    leader: "Oda Nobunaga",
+    exp: "Vanilla",
+    bias: "Coast",
+    tags: { military: 8, naval: 6, culture: 5 },
+  },
+  {
+    id: "korea",
+    civ: "Korea",
+    leader: "Sejong",
+    exp: "DLC",
+    bias: "Coast",
+    tags: { science: 10, production: 6 },
+  },
+  {
+    id: "maya",
+    civ: "Maya",
+    leader: "Pacal",
+    exp: "G&K",
+    bias: "None",
+    tags: { science: 8, religion: 7, culture: 6 },
+  },
+  {
+    id: "mongolia",
+    civ: "Mongolia",
+    leader: "Genghis Khan",
+    exp: "DLC",
+    bias: "Plains",
+    tags: { military: 9, mobility: 9 },
+  },
+  {
+    id: "morocco",
+    civ: "Morocco",
+    leader: "Ahmad al-Mansur",
+    exp: "BNW",
+    bias: "Desert",
+    tags: { gold: 9, diplomacy: 7, culture: 6 },
+  },
+  {
+    id: "netherlands",
+    civ: "Netherlands",
+    leader: "William",
+    exp: "G&K",
+    bias: "Grassland",
+    tags: { gold: 7, diplomacy: 6, science: 5 },
+  },
+  {
+    id: "ottomans",
+    civ: "Ottomans",
+    leader: "Suleiman",
+    exp: "Vanilla",
+    bias: "Coast",
+    tags: { naval: 8, military: 7, gold: 5 },
+  },
+  {
+    id: "persia",
+    civ: "Persia",
+    leader: "Darius I",
+    exp: "Vanilla",
+    bias: "None",
+    tags: { military: 7, mobility: 7, culture: 5 },
+  },
+  {
+    id: "poland",
+    civ: "Poland",
+    leader: "Casimir III",
+    exp: "BNW",
+    bias: "Plains",
+    tags: { science: 7, military: 6, culture: 6, gold: 6 },
+  },
+  {
+    id: "polynesia",
+    civ: "Polynesia",
+    leader: "Kamehameha",
+    exp: "DLC",
+    bias: "Coast",
+    tags: { naval: 9, culture: 6, mobility: 8 },
+  },
+  {
+    id: "portugal",
+    civ: "Portugal",
+    leader: "Maria I",
+    exp: "BNW",
+    bias: "Coast",
+    tags: { gold: 9, diplomacy: 7, naval: 6 },
+  },
+  {
+    id: "rome",
+    civ: "Rome",
+    leader: "Augustus Caesar",
+    exp: "Vanilla",
+    bias: "None",
+    tags: { production: 9, military: 8, wonders: 6 },
+  },
+  {
+    id: "russia",
+    civ: "Russia",
+    leader: "Catherine",
+    exp: "Vanilla",
+    bias: "Tundra",
+    tags: { production: 7, military: 7, science: 6 },
+  },
+  {
+    id: "shoshone",
+    civ: "Shoshone",
+    leader: "Pocatello",
+    exp: "BNW",
+    bias: "None",
+    tags: { defense: 7, culture: 6 },
+  },
+  {
+    id: "siam",
+    civ: "Siam",
+    leader: "Ramkhamhaeng",
+    exp: "Vanilla",
+    bias: "Avoid",
+    tags: { diplomacy: 9, culture: 6, religion: 6 },
+  },
+  {
+    id: "songhai",
+    civ: "Songhai",
+    leader: "Askia",
+    exp: "Vanilla",
+    bias: "Avoid",
+    tags: { gold: 8, military: 7, mobility: 6 },
+  },
+  {
+    id: "spain",
+    civ: "Spain",
+    leader: "Isabella",
+    exp: "DLC",
+    bias: "None",
+    tags: { gold: 7, religion: 7, culture: 6 },
+  },
+  {
+    id: "sweden",
+    civ: "Sweden",
+    leader: "Gustavus Adolphus",
+    exp: "G&K",
+    bias: "Tundra",
+    tags: { diplomacy: 8, military: 6, culture: 5 },
+  },
+  {
+    id: "venice",
+    civ: "Venice",
+    leader: "Enrico Dandolo",
+    exp: "BNW",
+    bias: "Coast",
+    tags: { gold: 10, diplomacy: 8, naval: 6 },
+  },
+  {
+    id: "zulu",
+    civ: "Zulus",
+    leader: "Shaka",
+    exp: "BNW",
+    bias: "Avoid",
+    tags: { military: 10, production: 7 },
+  },
+];
+
+// ---------------- Full World Wonder list (BNW+G&K) ----------------
+// World Wonders only (not National Wonders). “risk” approximates how contested/early-risky.
+const WONDERS = [
+  // Ancient
+  {
+    id: "great_library",
+    name: "Great Library",
+    era: "Ancient",
+    tags: ["science", "wonders"],
+    risk: 0.95,
+  },
+  {
+    id: "great_lighthouse",
+    name: "Great Lighthouse",
+    era: "Ancient",
+    tags: ["naval", "gold"],
+    risk: 0.8,
+  },
+  {
+    id: "hanging_gardens",
+    name: "Hanging Gardens",
+    era: "Classical",
+    tags: ["food"],
+    risk: 0.75,
+  },
+  {
+    id: "mausoleum",
+    name: "Mausoleum of Halicarnassus",
+    era: "Ancient",
+    tags: ["gold"],
+    risk: 0.55,
+  },
+  {
+    id: "stonehenge",
+    name: "Stonehenge",
+    era: "Ancient",
+    tags: ["religion"],
+    risk: 0.85,
+  },
+  {
+    id: "statue_zeus",
+    name: "Statue of Zeus",
+    era: "Ancient",
+    tags: ["military"],
+    risk: 0.65,
+  },
+  {
+    id: "temple_artemis",
+    name: "Temple of Artemis",
+    era: "Ancient",
+    tags: ["food"],
+    risk: 0.75,
+  },
+
+  // Classical
+  {
+    id: "colossus",
+    name: "Colossus",
+    era: "Classical",
+    tags: ["gold", "naval"],
+    risk: 0.65,
+  },
+  {
+    id: "great_wall",
+    name: "Great Wall",
+    era: "Classical",
+    tags: ["defense"],
+    risk: 0.7,
+  },
+  {
+    id: "oracle",
+    name: "Oracle",
+    era: "Classical",
+    tags: ["culture", "science"],
+    risk: 0.6,
+  },
+  {
+    id: "parthenon",
+    name: "Parthenon",
+    era: "Classical",
+    tags: ["culture"],
+    risk: 0.7,
+  },
+  {
+    id: "petra",
+    name: "Petra",
+    era: "Classical",
+    tags: ["food", "production", "gold"],
+    risk: 0.9,
+  },
+  {
+    id: "terracotta",
+    name: "Terracotta Army",
+    era: "Classical",
+    tags: ["military"],
+    risk: 0.6,
+  },
+
+  // Medieval
+  {
+    id: "alhambra",
+    name: "Alhambra",
+    era: "Medieval",
+    tags: ["military", "defense"],
+    risk: 0.55,
+  },
+  {
+    id: "angkor_wat",
+    name: "Angkor Wat",
+    era: "Medieval",
+    tags: ["culture"],
+    risk: 0.45,
+  },
+  {
+    id: "borobudur",
+    name: "Borobudur",
+    era: "Medieval",
+    tags: ["religion"],
+    risk: 0.6,
+  },
+  {
+    id: "chichen",
+    name: "Chichen Itza",
+    era: "Medieval",
+    tags: ["happiness"],
+    risk: 0.55,
+  },
+  {
+    id: "hagia_sophia",
+    name: "Hagia Sophia",
+    era: "Medieval",
+    tags: ["religion"],
+    risk: 0.55,
+  },
+  {
+    id: "himeji",
+    name: "Himeji Castle",
+    era: "Medieval",
+    tags: ["defense"],
+    risk: 0.55,
+  },
+  {
+    id: "machu",
+    name: "Machu Picchu",
+    era: "Medieval",
+    tags: ["gold"],
+    risk: 0.45,
+  },
+  {
+    id: "mosque_djenne",
+    name: "Great Mosque of Djenné",
+    era: "Medieval",
+    tags: ["religion"],
+    risk: 0.5,
+  },
+  {
+    id: "notre_dame",
+    name: "Notre Dame",
+    era: "Medieval",
+    tags: ["happiness"],
+    risk: 0.55,
+  },
+  {
+    id: "great_zimbabwe",
+    name: "Great Zimbabwe",
+    era: "Medieval",
+    tags: ["gold"],
+    risk: 0.55,
+  },
+
+  // Renaissance
+  {
+    id: "forbidden_palace",
+    name: "Forbidden Palace",
+    era: "Renaissance",
+    tags: ["diplomacy", "happiness"],
+    risk: 0.55,
+  },
+  {
+    id: "globe",
+    name: "Globe Theatre",
+    era: "Renaissance",
+    tags: ["culture"],
+    risk: 0.55,
+  },
+
+  {
+    id: "leaning",
+    name: "Leaning Tower of Pisa",
+    era: "Renaissance",
+    tags: ["science", "culture"],
+    risk: 0.6,
+  },
+  {
+    id: "porcelain",
+    name: "Porcelain Tower",
+    era: "Renaissance",
+    tags: ["science"],
+    risk: 0.55,
+  },
+  {
+    id: "red_fort",
+    name: "Red Fort",
+    era: "Renaissance",
+    tags: ["defense"],
+    risk: 0.45,
+  },
+  {
+    id: "sistine",
+    name: "Sistine Chapel",
+    era: "Renaissance",
+    tags: ["culture"],
+    risk: 0.55,
+  },
+  {
+    id: "taj_mahal",
+    name: "Taj Mahal",
+    era: "Renaissance",
+    tags: ["happiness", "culture"],
+    risk: 0.55,
+  },
+  {
+    id: "uffizi",
+    name: "Uffizi",
+    era: "Renaissance",
+    tags: ["culture"],
+    risk: 0.55,
+  },
+
+  // Industrial
+  {
+    id: "big_ben",
+    name: "Big Ben",
+    era: "Industrial",
+    tags: ["gold"],
+    risk: 0.35,
+  },
+  {
+    id: "brandenburg",
+    name: "Brandenburg Gate",
+    era: "Industrial",
+    tags: ["military"],
+    risk: 0.4,
+  },
+  {
+    id: "kremlin",
+    name: "Kremlin",
+    era: "Industrial",
+    tags: ["military", "production"],
+    risk: 0.4,
+  },
+  {
+    id: "louvre",
+    name: "Louvre",
+    era: "Industrial",
+    tags: ["culture"],
+    risk: 0.5,
+  },
+  {
+    id: "neuschwanstein",
+    name: "Neuschwanstein",
+    era: "Industrial",
+    tags: ["happiness", "culture"],
+    risk: 0.45,
+  },
+  {
+    id: "sagrada",
+    name: "Sagrada Familia",
+    era: "Industrial",
+    tags: ["culture", "religion"],
+    risk: 0.45,
+  },
+
+  // Modern
+  {
+    id: "broadway",
+    name: "Broadway",
+    era: "Modern",
+    tags: ["culture"],
+    risk: 0.35,
+  },
+  {
+    id: "cristo",
+    name: "Cristo Redentor",
+    era: "Modern",
+    tags: ["culture"],
+    risk: 0.35,
+  },
+  {
+    id: "eiffel",
+    name: "Eiffel Tower",
+    era: "Modern",
+    tags: ["culture", "happiness"],
+    risk: 0.4,
+  },
+  {
+    id: "mt_rushmore",
+    name: "Mt. Rushmore",
+    era: "Modern",
+    tags: ["happiness", "defense"],
+    risk: 0.35,
+  },
+  {
+    id: "pentagon",
+    name: "Pentagon",
+    era: "Modern",
+    tags: ["military"],
+    risk: 0.35,
+  },
+  {
+    id: "prora",
+    name: "Prora",
+    era: "Modern",
+    tags: ["happiness"],
+    risk: 0.35,
+  },
+  {
+    id: "statue_liberty",
+    name: "Statue of Liberty",
+    era: "Modern",
+    tags: ["production", "science"],
+    risk: 0.5,
+  },
+  {
+    id: "sydney",
+    name: "Sydney Opera House",
+    era: "Modern",
+    tags: ["culture"],
+    risk: 0.4,
+  },
+  {
+    id: "three_gorges",
+    name: "Three Gorges Dam",
+    era: "Modern",
+    tags: ["production"],
+    risk: 0.4,
+  },
+  {
+    id: "cn_tower",
+    name: "CN Tower",
+    era: "Modern",
+    tags: ["happiness"],
+    risk: 0.35,
+  },
+  {
+    id: "panama",
+    name: "Panama Canal",
+    era: "Modern",
+    tags: ["naval", "gold"],
+    risk: 0.45,
+  },
+
+  // Atomic
+  {
+    id: "united_nations",
+    name: "United Nations",
+    era: "Atomic",
+    tags: ["diplomacy"],
+    risk: 0.35,
+  },
+
+  // Information
+  {
+    id: "great_firewall",
+    name: "Great Firewall",
+    era: "Information",
+    tags: ["defense", "science"],
+    risk: 0.3,
+  },
+  {
+    id: "hubble",
+    name: "Hubble Space Telescope",
+    era: "Information",
+    tags: ["science"],
+    risk: 0.35,
+  },
+  {
+    id: "iss",
+    name: "International Space Station",
+    era: "Information",
+    tags: ["science", "diplomacy"],
+    risk: 0.35,
+  },
+];
+
+// ---------------- Scoring / Logic ----------------
+
+const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
+
+function dotScore(weights, prefs, tags) {
+  let s = 0;
+  for (const k of Object.keys(weights)) {
+    const w = weights[k] || 0;
+    const p = prefs[k] || 0;
+    const t = tags[k] || 0;
+    // No “flex”: match sliders + concrete strengths.
+    s += w * (0.65 * p + 0.35 * t);
+  }
+  return s;
+}
+
+function inferEmpireShape(prefs) {
+  const tall =
+    (prefs.food || 0) +
+    (prefs.science || 0) +
+    (prefs.culture || 0) +
+    (prefs.wonders || 0);
+  const wide =
+    (prefs.production || 0) + (prefs.gold || 0) + (prefs.military || 0);
+  if (tall > wide + 6) return "tall";
+  if (wide > tall + 6) return "wide";
+  return "hybrid";
+}
+
+function mapSynergyMultiplier(map, leader, prefs) {
+  const m = map.knobs;
+  const navalNeed = (prefs.naval || 0) / 10;
+  const navalTag = (leader.tags.naval || 0) / 10;
+
+  const landNeed = (prefs.military || 0) / 10;
+  const landTag = (leader.tags.military || 0) / 10;
+
+  const dipNeed = (prefs.diplomacy || 0) / 10;
+  const dipTag = (leader.tags.diplomacy || 0) / 10;
+
+  const relNeed = (prefs.religion || 0) / 10;
+  const relTag = (leader.tags.religion || 0) / 10;
+
+  const naval = m.navalValue * (0.6 * navalNeed + 0.4 * navalTag);
+  const land = m.landWarValue * (0.6 * landNeed + 0.4 * landTag);
+  const dip = m.diploValue * (0.6 * dipNeed + 0.4 * dipTag);
+  const rel = m.religionValue * (0.6 * relNeed + 0.4 * relTag);
+
+  // Start bias nudge
+  let bias = 1.0;
+  if (leader.bias === "Coast")
+    bias *=
+      map.id === "archipelago" || map.id === "small_continents" ? 1.06 : 1.02;
+  if (leader.bias === "Hill") bias *= map.id === "highlands" ? 1.06 : 1.02;
+  if (leader.bias === "Desert") bias *= 1.02;
+  if (leader.bias === "Avoid") bias *= 0.995;
+
+  return bias * (1 + 0.1 * (naval + land + dip + rel));
+}
+
+function difficultyMultiplier(diff, leader, prefs) {
+  // Higher AI pressure rewards defense + reliable tempo (science/production),
+  // and punishes wonder-greed unless player explicitly wants wonders.
+  const pressure = diff.aiPressure;
+  const def = (leader.tags.defense || 0) / 10;
+  const mil = (leader.tags.military || 0) / 10;
+  const prod = (leader.tags.production || 0) / 10;
+  const sci = (leader.tags.science || 0) / 10;
+
+  const wonderGreed = (prefs.wonders || 0) / 10;
+  const leaderWonder = (leader.tags.wonders || 0) / 10;
+
+  const survival = 1 + pressure * 0.1 * (0.55 * def + 0.3 * mil + 0.15 * prod);
+  const reliability = 1 + pressure * 0.06 * (0.55 * sci + 0.45 * prod);
+
+  // Wonder penalty: if player wants wonders AND leader isn't wonder/production-ready, penalize more at higher difficulty.
+  const wonderPenalty =
+    diff.wonderPunish * (1 - 0.6 * leaderWonder) * wonderGreed;
+
+  return clamp(survival * reliability * (1 - wonderPenalty), 0.75, 1.55);
+}
+
+function pickVictory(prefs, map, diff) {
+  const ranked = VICTORIES.map((v) => {
+    const base = dotScore(v.weights, prefs, {});
+    const mapMult =
+      v.id === "Domination"
+        ? 1 + 0.08 * map.knobs.landWarValue + 0.06 * map.knobs.navalValue
+        : v.id === "Diplomacy"
+        ? 1 + 0.1 * map.knobs.diploValue
+        : v.id === "Faith Plan"
+        ? 1 + 0.08 * map.knobs.religionValue
+        : v.id === "Science"
+        ? 1 + 0.05 * map.knobs.diploValue
+        : 1;
+
+    const diffMult =
+      v.id === "Culture"
+        ? 1 - diff.wonderPunish * 0.35
+        : v.id === "Science"
+        ? 1 + diff.aiPressure * 0.06
+        : v.id === "Domination"
+        ? 1 + diff.aiPressure * 0.04
+        : 1;
+
+    return { ...v, score: base * mapMult * diffMult };
+  }).sort((a, b) => b.score - a.score);
+
+  return ranked;
+}
+
+function scoreWonders(prefs, diff, victoryId, leader) {
+  // Determine acceptable risk based on:
+  // - wonder slider
+  // - leader's ability to support wonder play (wonders/production)
+  // - difficulty wonderPunish
+  const wonderFocus = (prefs.wonders || 0) / 10;
+  const leaderWonder = (leader.tags.wonders || 0) / 10;
+  const leaderProd = (leader.tags.production || 0) / 10;
+
+  const allowedRisk = clamp(
+    0.5 +
+      0.4 * wonderFocus +
+      0.2 * leaderWonder +
+      0.1 * leaderProd -
+      diff.wonderPunish,
+    0.25,
+    0.95
+  );
+
+  const primaryTag =
+    victoryId === "Science"
+      ? "science"
+      : victoryId === "Domination"
+      ? "military"
+      : victoryId === "Culture"
+      ? "culture"
+      : victoryId === "Diplomacy"
+      ? "diplomacy"
+      : "religion";
+
+  const scored = WONDERS.filter(
+    (w) => w.risk <= allowedRisk || wonderFocus >= 0.9
+  )
+    .map((w) => {
+      let s = 0;
+
+      // Base: match wonder tags to slider priorities
+      for (const t of w.tags) {
+        s += (prefs[t] || 0) * 1.0;
+      }
+
+      // Victory alignment bonus
+      if (w.tags.includes(primaryTag)) s += 8;
+
+      // Extra: wonder focus slider & leader support
+      s += 6 * wonderFocus + 2.5 * leaderWonder + 2.0 * leaderProd;
+
+      // Difficulty penalty to early/contested wonders (high risk)
+      s *= 1 - diff.wonderPunish * (w.risk - 0.25);
+
+      return { ...w, score: s };
+    })
+    .sort((a, b) => b.score - a.score);
+
+  return scored;
+}
+
+// ---------- First 50 Turns generator ----------
+function first50TurnsPlan({ prefs, map, diff, leader, victoryId, shape }) {
+  const steps = [];
+
+  const pressure = diff.aiPressure;
+  const wantReligion = (prefs.religion || 0) >= 7;
+  const wantWonders = (prefs.wonders || 0) >= 7;
+  const wantMilitary = (prefs.military || 0) >= 7;
+  const wantDefense = (prefs.defense || 0) >= 7;
+  const wantNaval = (prefs.naval || 0) >= 7;
+
+  // Universal opening heuristics
+  steps.push(
+    "Turn 0–5: Scout your immediate area; prioritize good city sites and luxury variety."
+  );
+  steps.push(
+    "Early build: Scout → (Scout if big map/land) → Monument; adjust if barbs/pressure."
+  );
+  if (pressure >= 1.0 || wantDefense) {
+    steps.push(
+      "Safety: Add an early Archer/Spearman if neighbors are close or barbs are intense (Emperor+ especially)."
+    );
+  }
+
+  // Map-specific
+  if (map.id === "archipelago" || map.id === "small_continents") {
+    steps.push(
+      "Map note (water): Prioritize coastal capital if possible; early Trireme/galley scouting is valuable."
+    );
+    if (wantNaval)
+      steps.push(
+        "Naval focus: Aim Sailing earlier; secure sea resources + coastal infrastructure."
+      );
+  }
+  if (map.id === "pangaea") {
+    steps.push(
+      "Map note (land): Expect early contact; prioritize defense and road/trade connectivity carefully."
+    );
+    if (wantMilitary)
+      steps.push(
+        "Tempo: Plan an early timing push only if production + unit techs line up."
+      );
+  }
+  if (map.id === "highlands") {
+    steps.push(
+      "Map note (highlands): Hills/mountains slow movement—value defense, roads later, and strong production sites."
+    );
+  }
+
+  // Religion
+  if (wantReligion || leader.tags.religion >= 7) {
+    steps.push(
+      "Faith plan: Build Shrine early; consider Pantheon timing and settle spots that support faith yields."
+    );
+  }
+
+  // Wonders & difficulty
+  if (wantWonders || leader.tags.wonders >= 7) {
+    if (
+      diff.wonderPunish >= 0.24 &&
+      wantWonders &&
+      (leader.tags.wonders || 0) < 7
+    ) {
+      steps.push(
+        "Wonders (high difficulty): Avoid ‘all-in’ early wonders unless you have a clear production window—pick 1–2 targets max."
+      );
+    } else {
+      steps.push(
+        "Wonders: Pick 1–2 early targets that match your plan; don’t derail settlers/defense to chase everything."
+      );
+    }
+  } else {
+    steps.push(
+      "Wonders: Treat early wonders as optional—prioritize settlers, workers, and core infrastructure first."
+    );
+  }
+
+  // Victory-specific core
+  if (victoryId === "Science") {
+    steps.push(
+      "Science core: Prioritize Writing early; get libraries up promptly; aim for National College timing."
+    );
+    if (shape === "tall")
+      steps.push(
+        "Tall science: Grow capital hard; settle fewer, stronger cities; lock key tiles/specialists later."
+      );
+    else
+      steps.push(
+        "Wide science: Expand early enough to secure land; keep happiness stable; then stabilize with libraries."
+      );
+  }
+
+  if (victoryId === "Domination") {
+    steps.push(
+      "Domination core: Scout enemy capitals/terrain; pick a first target; don’t start wars without a tech/production edge."
+    );
+    if (pressure >= 1.0)
+      steps.push(
+        "Emperor+: Make sure your economy can sustain units (gold slider helps); avoid overbuilding units without a plan."
+      );
+  }
+
+  if (victoryId === "Culture") {
+    steps.push(
+      "Culture core: Get culture buildings early; plan great work slots; keep happiness stable so you can keep growing."
+    );
+    steps.push(
+      "Tourism prep: Favor wonders that add culture/slots; prioritize trade routes and open borders later."
+    );
+  }
+
+  if (victoryId === "Diplomacy") {
+    steps.push(
+      "Diplomacy core: Prioritize gold engine early (trade routes, markets later); avoid needless wars that break CS ties."
+    );
+    steps.push(
+      "City-states: Start meeting them early (scouting is value); plan Patronage midgame."
+    );
+  }
+
+  if (victoryId === "Faith Plan") {
+    steps.push(
+      "Faith core: Secure religion; choose beliefs that convert faith into the win you want (culture/science/influence)."
+    );
+    steps.push(
+      "Pivot: After founding/enhancing, transition into Science/Culture/Diplo focus depending on game state."
+    );
+  }
+
+  // Leader strength nudges (no “flex”, only their top tags)
+  const topTags = Object.entries(leader.tags)
+    .filter(([, v]) => typeof v === "number")
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([k]) => k);
+
+  if (topTags.includes("production"))
+    steps.push(
+      "Leader strength: Use strong production to hit timing windows (settlers, key buildings, or targeted wonders)."
+    );
+  if (topTags.includes("science"))
+    steps.push(
+      "Leader strength: Lean into early science edges (Writing/NC) and keep tech parity above all."
+    );
+  if (topTags.includes("military"))
+    steps.push(
+      "Leader strength: Use unit tempo to control space—pressure neighbors or defend aggressively."
+    );
+  if (topTags.includes("gold"))
+    steps.push(
+      "Leader strength: Treat gold as a weapon—buy key buildings/units and leverage trade routes."
+    );
+  if (topTags.includes("diplomacy"))
+    steps.push(
+      "Leader strength: Meet city-states early; plan to maintain alliances rather than random friendships."
+    );
+  if (topTags.includes("culture"))
+    steps.push(
+      "Leader strength: Prioritize early culture for faster policy acceleration."
+    );
+
+  // Trim to something actually usable
+  return steps.slice(0, 12);
+}
+
+// ---------------- UI Components ----------------
+
+function Pill({ children, tone = "neutral" }) {
+  const colors = {
+    neutral: { bg: "rgba(255,255,255,0.08)", border: "rgba(255,255,255,0.14)" },
+    good: { bg: "rgba(34,197,94,0.14)", border: "rgba(34,197,94,0.30)" },
+    warn: { bg: "rgba(245,158,11,0.16)", border: "rgba(245,158,11,0.34)" },
+  }[tone];
+
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        padding: "6px 10px",
+        borderRadius: 999,
+        border: `1px solid ${colors.border}`,
+        background: colors.bg,
+        color: "rgba(255,255,255,0.92)",
+        fontSize: 12,
+        lineHeight: 1,
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
+function Card({ title, icon, right, children }) {
+  return (
+    <div
+      style={{
+        borderRadius: 18,
+        background: "rgba(255,255,255,0.06)",
+        border: "1px solid rgba(255,255,255,0.12)",
+        boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          padding: "14px 16px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          borderBottom: "1px solid rgba(255,255,255,0.10)",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ fontSize: 18 }}>{icon}</div>
+          <div style={{ fontWeight: 800, letterSpacing: 0.2 }}>{title}</div>
+        </div>
+        <div>{right}</div>
+      </div>
+      <div style={{ padding: 16 }}>{children}</div>
+    </div>
+  );
+}
+
+function Meter({ value }) {
+  const pct = clamp(Math.round((value / 10) * 100), 0, 100);
+  return (
+    <div
+      style={{
+        height: 10,
+        borderRadius: 999,
+        background: "rgba(255,255,255,0.10)",
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          height: "100%",
+          width: `${pct}%`,
+          background: "rgba(99,102,241,0.85)",
+        }}
+      />
+    </div>
+  );
+}
+
+function Drawer({ open, onClose, title, children }) {
+  if (!open) return null;
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.55)",
+        display: "flex",
+        justifyContent: "flex-end",
+        zIndex: 50,
+      }}
+      onMouseDown={onClose}
+    >
+      <div
+        onMouseDown={(e) => e.stopPropagation()}
+        style={{
+          width: "min(520px, 92vw)",
+          height: "100%",
+          background: "rgba(10,14,25,0.98)",
+          borderLeft: "1px solid rgba(255,255,255,0.12)",
+          boxShadow: "-10px 0 40px rgba(0,0,0,0.35)",
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        <div
+          style={{
+            padding: 16,
+            borderBottom: "1px solid rgba(255,255,255,0.10)",
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 12,
+          }}
+        >
+          <div style={{ fontWeight: 900, fontSize: 16 }}>{title}</div>
+          <button
+            onClick={onClose}
+            style={{
+              background: "rgba(255,255,255,0.08)",
+              border: "1px solid rgba(255,255,255,0.16)",
+              color: "white",
+              borderRadius: 12,
+              padding: "8px 10px",
+              cursor: "pointer",
+            }}
+          >
+            Close ✕
+          </button>
+        </div>
+        <div style={{ padding: 16, overflow: "auto" }}>{children}</div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------- App ----------------
+
+export default function App() {
+  const [prefs, setPrefs] = useState(() =>
+    PRIORITIES.reduce((a, p) => ({ ...a, [p.key]: 5 }), {})
+  );
+  const [mapId, setMapId] = useState("continents");
+  const [diffId, setDiffId] = useState("prince");
+
+  // Map-specific filtering controls
+  const [mapFilterEnabled, setMapFilterEnabled] = useState(true);
+  const [mapFilterStrictness, setMapFilterStrictness] = useState(0.55); // 0..1, higher = stricter
+
+  // Drawer state
+  const [drawerLeaderId, setDrawerLeaderId] = useState(null);
+
+  const map = MAPS.find((m) => m.id === mapId);
+  const diff = DIFFICULTIES.find((d) => d.id === diffId);
+
+  const empireShape = useMemo(() => inferEmpireShape(prefs), [prefs]);
+
+  const victoryRanking = useMemo(
+    () => pickVictory(prefs, map, diff),
+    [prefs, map, diff]
+  );
+  const bestVictory = victoryRanking[0];
+
+  const leaderRanking = useMemo(() => {
+    const baseWeights = Object.fromEntries(PRIORITIES.map((p) => [p.key, 1]));
+
+    const scored = LEADERS.map((L) => {
+      const base = dotScore(baseWeights, prefs, L.tags);
+
+      // Victory alignment multiplier: reward leaders whose strengths match the chosen direction
+      const v = bestVictory.id;
+      const vMult =
+        v === "Science"
+          ? 1 +
+            0.16 * ((L.tags.science || 0) / 10) +
+            0.06 * ((L.tags.production || 0) / 10)
+          : v === "Domination"
+          ? 1 +
+            0.18 * ((L.tags.military || 0) / 10) +
+            0.08 * ((L.tags.production || 0) / 10) +
+            0.06 * ((L.tags.naval || 0) / 10)
+          : v === "Culture"
+          ? 1 +
+            0.18 * ((L.tags.culture || 0) / 10) +
+            0.08 * ((L.tags.wonders || 0) / 10)
+          : v === "Diplomacy"
+          ? 1 +
+            0.18 * ((L.tags.diplomacy || 0) / 10) +
+            0.12 * ((L.tags.gold || 0) / 10)
+          : 1 + 0.18 * ((L.tags.religion || 0) / 10);
+
+      const mMult = mapSynergyMultiplier(map, L, prefs);
+      const dMult = difficultyMultiplier(diff, L, prefs);
+
+      // Expose map synergy score for filters (normalize-ish)
+      const mapSynergyScore = clamp((mMult - 1) / 0.25, 0, 1); // ~0..1
+
+      const score = base * vMult * mMult * dMult;
+
+      // highlights for explainability
+      const highlights = Object.entries(L.tags)
+        .filter(([, v]) => typeof v === "number")
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([k, v]) => `${ICON[k] || "✨"} ${k} ${v}/10`);
+
+      return { ...L, score, mapSynergyScore, highlights };
+    }).sort((a, b) => b.score - a.score);
+
+    // Optional map-specific filter: only show leaders with decent synergy with this map
+    if (!mapFilterEnabled) return scored;
+
+    const threshold = mapFilterStrictness; // 0..1
+    const filtered = scored.filter((l) => l.mapSynergyScore >= threshold);
+
+    // Never return empty: if strict filter wipes list, fall back to top scored
+    return filtered.length ? filtered : scored;
+  }, [prefs, map, diff, bestVictory, mapFilterEnabled, mapFilterStrictness]);
+
+  const topLeaders = leaderRanking.slice(0, 10);
+  const recommendedLeader = topLeaders[0];
+
+  const policyPlan = useMemo(() => {
+    const ctx = { victory: bestVictory.id, shape: empireShape };
+    return POLICY_PATHS.find((p) => p.when(ctx)) || null;
+  }, [bestVictory, empireShape]);
+
+  const wonderRanking = useMemo(() => {
+    return scoreWonders(prefs, diff, bestVictory.id, recommendedLeader).slice(
+      0,
+      12
+    );
+  }, [prefs, diff, bestVictory, recommendedLeader]);
+
+  const drawerLeader = useMemo(() => {
+    if (!drawerLeaderId) return null;
+    const base = LEADERS.find((l) => l.id === drawerLeaderId);
+    if (!base) return null;
+
+    // Recompute “best victories for this map/difficulty” (top 2)
+    const vRank = pickVictory(prefs, map, diff);
+    const best2 = vRank.slice(0, 2).map((v) => v.id);
+
+    const shape = inferEmpireShape(prefs);
+    const plan = first50TurnsPlan({
+      prefs,
+      map,
+      diff,
+      leader: base,
+      victoryId: bestVictory.id,
+      shape,
+    });
+
+    const wonderPicks = scoreWonders(prefs, diff, bestVictory.id, base).slice(
+      0,
+      8
+    );
+
+    // compute displayed “map synergy”
+    const mMult = mapSynergyMultiplier(map, base, prefs);
+    const dMult = difficultyMultiplier(diff, base, prefs);
+
+    return { ...base, best2, plan, wonderPicks, mMult, dMult, shape };
+  }, [drawerLeaderId, prefs, map, diff, bestVictory]);
+
+  // Styling
+  const pageStyle = {
+    minHeight: "100vh",
+    background:
+      "radial-gradient(1200px 800px at 20% 10%, rgba(99,102,241,0.35), transparent 60%)," +
+      "radial-gradient(900px 700px at 80% 20%, rgba(34,197,94,0.20), transparent 55%)," +
+      "radial-gradient(900px 700px at 60% 90%, rgba(245,158,11,0.22), transparent 60%)," +
+      "linear-gradient(180deg, #0b1220, #070b14 65%, #050812)",
+    color: "rgba(255,255,255,0.92)",
+    fontFamily:
+      "ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji",
+    padding: 18,
+  };
+
+  const container = { maxWidth: 1180, margin: "0 auto" };
+
+  return (
+    <div style={pageStyle}>
+      <div style={container}>
+        <header
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: 16,
+            marginBottom: 14,
+            flexWrap: "wrap",
+          }}
+        >
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ fontSize: 26 }}>🎮</div>
+              <h1 style={{ margin: 0, fontSize: 22, letterSpacing: 0.2 }}>
+                Civ V Playstyle Advisor
+              </h1>
+            </div>
+            <div
+              style={{
+                marginTop: 6,
+                color: "rgba(255,255,255,0.70)",
+                maxWidth: 780,
+                lineHeight: 1.35,
+              }}
+            >
+              Sliders → map/difficulty → leader recommendation. Click a leader
+              for the full <b>details drawer</b> and a tailored{" "}
+              <b>first 50 turns</b> plan.
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <Pill tone="neutral">
+              {MAPS.find((m) => m.id === mapId)?.icon}{" "}
+              {MAPS.find((m) => m.id === mapId)?.name}
+            </Pill>
+            <Pill tone={diff.aiPressure >= 1.0 ? "warn" : "good"}>
+              {diff.icon} {diff.name}
+            </Pill>
+            <Pill tone="neutral">Empire: {empireShape.toUpperCase()}</Pill>
+          </div>
+        </header>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "420px 1fr",
+            gap: 14,
+            alignItems: "start",
+          }}
+        >
+          {/* Left: controls */}
+          <div style={{ display: "grid", gap: 14 }}>
+            <Card
+              title="Game Setup"
+              icon="⚙️"
+              right={<Pill tone="neutral">Map-aware</Pill>}
+            >
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: 12,
+                }}
+              >
+                <div>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: "rgba(255,255,255,0.72)",
+                      marginBottom: 6,
+                    }}
+                  >
+                    Map Type
+                  </div>
+                  <select
+                    value={mapId}
+                    onChange={(e) => setMapId(e.target.value)}
+                    style={selectStyle()}
+                  >
+                    {MAPS.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.icon} {m.name}
+                      </option>
+                    ))}
+                  </select>
+                  <div
+                    style={{
+                      marginTop: 8,
+                      color: "rgba(255,255,255,0.65)",
+                      fontSize: 12,
+                      lineHeight: 1.3,
+                    }}
+                  >
+                    {map.notes}
+                  </div>
+                </div>
+
+                <div>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: "rgba(255,255,255,0.72)",
+                      marginBottom: 6,
+                    }}
+                  >
+                    Difficulty
+                  </div>
+                  <select
+                    value={diffId}
+                    onChange={(e) => setDiffId(e.target.value)}
+                    style={selectStyle()}
+                  >
+                    {DIFFICULTIES.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.icon} {d.name}
+                      </option>
+                    ))}
+                  </select>
+                  <div
+                    style={{
+                      marginTop: 8,
+                      color: "rgba(255,255,255,0.65)",
+                      fontSize: 12,
+                      lineHeight: 1.3,
+                    }}
+                  >
+                    AI pressure: <strong>{diff.aiPressure.toFixed(2)}</strong> •
+                    Wonder contest:{" "}
+                    <strong>{diff.wonderPunish.toFixed(2)}</strong>
+                  </div>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  marginTop: 12,
+                  paddingTop: 12,
+                  borderTop: "1px solid rgba(255,255,255,0.10)",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 10,
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <div style={{ fontWeight: 800 }}>Map-specific filtering</div>
+                  <label
+                    style={{ display: "flex", gap: 8, alignItems: "center" }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={mapFilterEnabled}
+                      onChange={(e) => setMapFilterEnabled(e.target.checked)}
+                    />
+                    <span
+                      style={{ color: "rgba(255,255,255,0.75)", fontSize: 12 }}
+                    >
+                      Prefer map-synergy leaders
+                    </span>
+                  </label>
+                </div>
+
+                <div
+                  style={{
+                    marginTop: 10,
+                    color: "rgba(255,255,255,0.65)",
+                    fontSize: 12,
+                  }}
+                >
+                  Strictness: {Math.round(mapFilterStrictness * 100)}%
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={Math.round(mapFilterStrictness * 100)}
+                  onChange={(e) =>
+                    setMapFilterStrictness(Number(e.target.value) / 100)
+                  }
+                  style={{ width: "100%", marginTop: 6 }}
+                />
+              </div>
+            </Card>
+
+            <Card
+              title="Your Playstyle Sliders"
+              icon="🎚️"
+              right={<Pill tone="neutral">0–10</Pill>}
+            >
+              <div style={{ display: "grid", gap: 12 }}>
+                {PRIORITIES.map((p) => {
+                  const val = prefs[p.key];
+                  return (
+                    <div key={p.key} style={{ display: "grid", gap: 8 }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          gap: 10,
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 10,
+                          }}
+                        >
+                          <div style={{ fontSize: 16 }}>{p.icon}</div>
+                          <div>
+                            <div style={{ fontWeight: 800 }}>{p.label}</div>
+                            <div
+                              style={{
+                                fontSize: 12,
+                                color: "rgba(255,255,255,0.65)",
+                              }}
+                            >
+                              {p.desc}
+                            </div>
+                          </div>
+                        </div>
+                        <Pill
+                          tone={
+                            val >= 8 ? "good" : val <= 2 ? "warn" : "neutral"
+                          }
+                        >
+                          {val}/10
+                        </Pill>
+                      </div>
+
+                      <input
+                        type="range"
+                        min={0}
+                        max={10}
+                        value={val}
+                        onChange={(e) =>
+                          setPrefs({
+                            ...prefs,
+                            [p.key]: Number(e.target.value),
+                          })
+                        }
+                        style={{ width: "100%" }}
+                      />
+                      <Meter value={val} />
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+          </div>
+
+          {/* Right: results */}
+          <div style={{ display: "grid", gap: 14 }}>
+            <Card
+              title="Recommended Victory"
+              icon={bestVictory.icon}
+              right={<Pill tone="good">Top</Pill>}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ fontSize: 26 }}>{bestVictory.icon}</div>
+                <div>
+                  <div style={{ fontSize: 18, fontWeight: 900 }}>
+                    {bestVictory.id}
+                  </div>
+                  <div style={{ color: "rgba(255,255,255,0.70)" }}>
+                    Driven by your sliders with map/difficulty nudges.
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
+                {victoryRanking.slice(0, 5).map((v, idx) => (
+                  <div key={v.id} style={{ display: "grid", gap: 6 }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                      }}
+                    >
+                      <div style={{ fontWeight: 800 }}>
+                        {idx === 0 ? "✅ " : ""}
+                        {v.icon} {v.id}
+                      </div>
+                      <Pill tone={idx === 0 ? "good" : "neutral"}>
+                        {v.score.toFixed(1)}
+                      </Pill>
+                    </div>
+                    <div
+                      style={{
+                        height: 8,
+                        borderRadius: 999,
+                        background: "rgba(255,255,255,0.10)",
+                        overflow: "hidden",
+                      }}
+                    >
+                      <div
+                        style={{
+                          height: "100%",
+                          width: `${clamp(
+                            (v.score / victoryRanking[0].score) * 100,
+                            0,
+                            100
+                          )}%`,
+                          background: "rgba(34,197,94,0.80)",
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+
+            <Card
+              title="Suggested Leaders"
+              icon="👑"
+              right={<Pill tone="neutral">Click for details</Pill>}
+            >
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: 10,
+                }}
+              >
+                {topLeaders.slice(0, 8).map((L, idx) => (
+                  <button
+                    key={L.id}
+                    onClick={() => setDrawerLeaderId(L.id)}
+                    style={{
+                      textAlign: "left",
+                      cursor: "pointer",
+                      padding: 12,
+                      borderRadius: 14,
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      background:
+                        idx === 0
+                          ? "rgba(99,102,241,0.14)"
+                          : "rgba(255,255,255,0.05)",
+                      color: "white",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: 10,
+                      }}
+                    >
+                      <div style={{ fontWeight: 900 }}>
+                        {idx === 0 ? "⭐ " : ""}
+                        {L.civ} — {L.leader}
+                      </div>
+                      <Pill tone={idx === 0 ? "good" : "neutral"}>
+                        {Math.round((L.score / topLeaders[0].score) * 100)}%
+                      </Pill>
+                    </div>
+
+                    <div
+                      style={{
+                        marginTop: 8,
+                        display: "flex",
+                        gap: 8,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <Pill tone="neutral">
+                        {BIAS_ICON[L.bias] || "🎲"} {L.bias}
+                      </Pill>
+                      <Pill tone="neutral">{L.exp}</Pill>
+                      <Pill tone="neutral">
+                        Map fit {Math.round(L.mapSynergyScore * 100)}%
+                      </Pill>
+                    </div>
+
+                    <div
+                      style={{
+                        marginTop: 8,
+                        color: "rgba(255,255,255,0.75)",
+                        fontSize: 12,
+                      }}
+                    >
+                      Why: {L.highlights.join(" • ")}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </Card>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: 14,
+              }}
+            >
+              <Card
+                title="Policy Guidance"
+                icon="📜"
+                right={<Pill tone="neutral">Starter plan</Pill>}
+              >
+                {policyPlan ? (
+                  <div>
+                    <div style={{ fontWeight: 900, fontSize: 16 }}>
+                      {policyPlan.name}
+                    </div>
+                    <ul
+                      style={{
+                        margin: "10px 0 0 18px",
+                        color: "rgba(255,255,255,0.88)",
+                      }}
+                    >
+                      {policyPlan.steps.map((s, i) => (
+                        <li key={i} style={{ marginBottom: 6 }}>
+                          {s}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <div style={{ color: "rgba(255,255,255,0.75)" }}>
+                    Default: stabilize (Tradition/Liberty) then align midgame
+                    trees with your win condition.
+                  </div>
+                )}
+              </Card>
+
+              <Card
+                title="Wonder Focus List"
+                icon="🏛️"
+                right={<Pill tone="good">Top targets</Pill>}
+              >
+                <div
+                  style={{ color: "rgba(255,255,255,0.70)", lineHeight: 1.35 }}
+                >
+                  Filtered by difficulty (early wonders get riskier on Emperor+
+                  unless Wonder Focus is high).
+                </div>
+
+                <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+                  {wonderRanking.slice(0, 8).map((w, idx) => (
+                    <div
+                      key={w.id}
+                      style={{
+                        padding: 10,
+                        borderRadius: 14,
+                        border: "1px solid rgba(255,255,255,0.12)",
+                        background: "rgba(255,255,255,0.05)",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "flex-start",
+                        gap: 10,
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontWeight: 900 }}>
+                          {idx === 0 ? "⭐ " : ""}
+                          {w.name}
+                        </div>
+                        <div
+                          style={{
+                            color: "rgba(255,255,255,0.65)",
+                            fontSize: 12,
+                          }}
+                        >
+                          {w.era}
+                        </div>
+                        <div
+                          style={{
+                            marginTop: 6,
+                            display: "flex",
+                            gap: 6,
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          {w.tags.slice(0, 3).map((t) => (
+                            <Pill key={t} tone="neutral">
+                              {ICON[t] || "✨"} {t}
+                            </Pill>
+                          ))}
+                        </div>
+                      </div>
+
+                      <Pill tone={w.risk >= 0.85 ? "warn" : "neutral"}>
+                        Risk {Math.round(w.risk * 100)}%
+                      </Pill>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ marginTop: 10 }}>
+                  <button
+                    onClick={() => setDrawerLeaderId(recommendedLeader.id)}
+                    style={{
+                      width: "100%",
+                      padding: "10px 12px",
+                      borderRadius: 14,
+                      border: "1px solid rgba(255,255,255,0.16)",
+                      background: "rgba(255,255,255,0.08)",
+                      color: "white",
+                      cursor: "pointer",
+                      fontWeight: 800,
+                    }}
+                  >
+                    Open leader drawer (includes full wonder list + first 50
+                    turns)
+                  </button>
+                </div>
+              </Card>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Leader Details Drawer */}
+      <Drawer
+        open={!!drawerLeader}
+        onClose={() => setDrawerLeaderId(null)}
+        title={
+          drawerLeader ? `${drawerLeader.civ} — ${drawerLeader.leader}` : ""
+        }
+      >
+        {drawerLeader && (
+          <div style={{ display: "grid", gap: 12 }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <Pill tone="neutral">{drawerLeader.exp}</Pill>
+              <Pill tone="neutral">
+                {BIAS_ICON[drawerLeader.bias] || "🎲"} {drawerLeader.bias}
+              </Pill>
+              <Pill tone="neutral">
+                {MAPS.find((m) => m.id === mapId)?.icon}{" "}
+                {MAPS.find((m) => m.id === mapId)?.name}
+              </Pill>
+              <Pill tone={diff.aiPressure >= 1.0 ? "warn" : "good"}>
+                {diff.icon} {diff.name}
+              </Pill>
+              <Pill tone="neutral">
+                Map mult ×{drawerLeader.mMult.toFixed(2)}
+              </Pill>
+              <Pill tone="neutral">
+                Diff mult ×{drawerLeader.dMult.toFixed(2)}
+              </Pill>
+            </div>
+
+            <Card
+              title="Best wins on this setup"
+              icon="🎯"
+              right={<Pill tone="good">Top 2</Pill>}
+            >
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {drawerLeader.best2.map((v) => (
+                  <Pill key={v} tone="good">
+                    {v}
+                  </Pill>
+                ))}
+              </div>
+              <div style={{ marginTop: 10, color: "rgba(255,255,255,0.70)" }}>
+                Current app recommendation: <b>{bestVictory.id}</b> (based on
+                your sliders + map/difficulty).
+              </div>
+            </Card>
+
+            <Card
+              title="Leader strengths (no flex bonus)"
+              icon="🧩"
+              right={<Pill tone="neutral">Top tags</Pill>}
+            >
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {Object.entries(drawerLeader.tags)
+                  .filter(([, v]) => typeof v === "number")
+                  .sort((a, b) => b[1] - a[1])
+                  .slice(0, 8)
+                  .map(([k, v]) => (
+                    <Pill key={k} tone="neutral">
+                      {ICON[k] || "✨"} {k}: {v}/10
+                    </Pill>
+                  ))}
+              </div>
+              <div style={{ marginTop: 10, color: "rgba(255,255,255,0.70)" }}>
+                These tags only help if you asked for them via sliders (plus
+                map/difficulty constraints).
+              </div>
+            </Card>
+
+            <Card
+              title="First 50 turns plan"
+              icon="🧠"
+              right={
+                <Pill tone="neutral">{drawerLeader.shape.toUpperCase()}</Pill>
+              }
+            >
+              <ol style={{ margin: "8px 0 0 18px", lineHeight: 1.45 }}>
+                {drawerLeader.plan.map((s, i) => (
+                  <li key={i} style={{ marginBottom: 6 }}>
+                    {s}
+                  </li>
+                ))}
+              </ol>
+            </Card>
+
+            <Card
+              title="Top wonders for this leader + your sliders"
+              icon="🏛️"
+              right={<Pill tone="good">Targets</Pill>}
+            >
+              <div
+                style={{ color: "rgba(255,255,255,0.70)", lineHeight: 1.35 }}
+              >
+                This is the same full wonder list, rescored using this leader
+                (not just the #1 leader).
+              </div>
+              <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+                {drawerLeader.wonderPicks.map((w) => (
+                  <div
+                    key={w.id}
+                    style={{
+                      padding: 10,
+                      borderRadius: 14,
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      background: "rgba(255,255,255,0.05)",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "flex-start",
+                      gap: 10,
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontWeight: 900 }}>{w.name}</div>
+                      <div
+                        style={{
+                          color: "rgba(255,255,255,0.65)",
+                          fontSize: 12,
+                        }}
+                      >
+                        {w.era}
+                      </div>
+                      <div
+                        style={{
+                          marginTop: 6,
+                          display: "flex",
+                          gap: 6,
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        {w.tags.slice(0, 4).map((t) => (
+                          <Pill key={t} tone="neutral">
+                            {ICON[t] || "✨"} {t}
+                          </Pill>
+                        ))}
+                      </div>
+                    </div>
+                    <Pill tone={w.risk >= 0.85 ? "warn" : "neutral"}>
+                      Risk {Math.round(w.risk * 100)}%
+                    </Pill>
+                  </div>
+                ))}
+              </div>
+
+              <details style={{ marginTop: 12 }}>
+                <summary style={{ cursor: "pointer", fontWeight: 800 }}>
+                  Show full world wonder list
+                </summary>
+                <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+                  {WONDERS.map((w) => (
+                    <div
+                      key={w.id}
+                      style={{
+                        padding: 10,
+                        borderRadius: 14,
+                        border: "1px solid rgba(255,255,255,0.12)",
+                        background: "rgba(255,255,255,0.04)",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          gap: 10,
+                        }}
+                      >
+                        <div style={{ fontWeight: 800 }}>{w.name}</div>
+                        <div
+                          style={{
+                            color: "rgba(255,255,255,0.70)",
+                            fontSize: 12,
+                          }}
+                        >
+                          {w.era} • risk {Math.round(w.risk * 100)}%
+                        </div>
+                      </div>
+                      <div
+                        style={{
+                          marginTop: 6,
+                          display: "flex",
+                          gap: 6,
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        {w.tags.map((t) => (
+                          <Pill key={t} tone="neutral">
+                            {ICON[t] || "✨"} {t}
+                          </Pill>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            </Card>
+          </div>
+        )}
+      </Drawer>
+    </div>
+  );
+}
+
+function selectStyle() {
+  return {
+    width: "100%",
+    padding: "10px 12px",
+    borderRadius: 12,
+    background: "rgba(255,255,255,0.08)",
+    border: "1px solid rgba(255,255,255,0.14)",
+    color: "rgba(255,255,255,0.92)",
+    outline: "none",
+    fontWeight: 700,
+  };
+}
